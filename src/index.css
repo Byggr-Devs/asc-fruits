@@ -21,16 +21,17 @@
   --color-danger: #dc2626;
   --color-danger-soft: #fee2e2;
 
-  --text-3xl: 32px;
-  --text-2xl: 26px;
-  --text-xl: 22px;
-  --text-lg: 20px;
-  --text-md: 18px;
-  --text-base: 16px;
-  --text-sm: 14px;
-  --text-xs: 13px;
-  --text-2xs: 12px;
-  --text-3xs: 11px;
+  /* Bumped for older operators (40+) — larger body and UI chrome */
+  --text-3xl: 40px;
+  --text-2xl: 32px;
+  --text-xl: 27px;
+  --text-lg: 24px;
+  --text-md: 22px;
+  --text-base: 20px;
+  --text-sm: 18px;
+  --text-xs: 16px;
+  --text-2xs: 15px;
+  --text-3xs: 14px;
 
   --radius-card: 12px;
   --radius-input: 7px;
@@ -48,7 +49,7 @@
     min-height: 100%;
   }
   body {
-    @apply bg-bg font-sans text-sm text-ink antialiased;
+    @apply bg-bg font-sans text-base text-ink antialiased;
   }
   input[type='number']::-webkit-inner-spin-button,
   input[type='number']::-webkit-outer-spin-button {
@@ -62,10 +63,10 @@
 
 @layer components {
   .input {
-    @apply h-11 w-full rounded-input border border-border bg-surface px-3 text-sm text-ink outline-none transition placeholder:text-muted/70 focus:border-primary focus:shadow-[0_0_0_3px_rgba(46,125,79,0.22)];
+    @apply h-14 w-full rounded-input border border-border bg-surface px-3.5 text-base text-ink outline-none transition placeholder:text-muted/70 focus:border-primary focus:shadow-[0_0_0_3px_rgba(46,125,79,0.22)];
   }
   .label {
-    @apply mb-1 block text-2xs font-semibold uppercase tracking-wide text-muted;
+    @apply mb-1 block text-xs font-semibold uppercase tracking-wide text-muted;
   }
   .card {
     @apply rounded-card border border-border bg-surface shadow-card;
