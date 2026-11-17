@@ -3,17 +3,13 @@ import { useMemo } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../auth/AuthProvider'
 import { Chip, Section, Spinner, StatCard, Thumb } from '../components/ui'
+import { useLanguage } from '../i18n/LanguageProvider'
 import { dayStartISO, formatDateTime, formatKg, formatNumber, todayISO } from '../lib/format'
 import { useCatalog, useCurrentStock, useMovements, usePendingOrderCount } from '../lib/queries'
 
-const actions = [
-  { to: '/orders/new', label: 'New order', hint: 'Order from a vendor', icon: Plus },
-  { to: '/godown/receive', label: 'Receive delivery', hint: 'Goods arrived at godown', icon: PackageCheck },
-  { to: '/stock/adjust', label: 'Adjust stock', hint: 'Wastage or correction', icon: SlidersHorizontal },
-]
-
 export function Dashboard() {
   const { session } = useAuth()
+  const { t, displayName } = useLanguage()
   const stock = useCurrentStock()
   const pending = usePendingOrderCount()
   const today = useMovements({ from: dayStartISO(todayISO()), type: 'receipt' })
@@ -27,31 +23,47 @@ export function Dashboard() {
   const receivedToday = (today.data ?? []).reduce((s, m) => s + Number(m.qty_kg), 0)
   const name = session?.user.email?.split('@')[0] ?? ''
 
+  const actions = [
+    { to: '/orders/new', label: t('dash.newOrder'), hint: t('dash.newOrderHint'), icon: Plus },
+    {
+      to: '/godown/receive',
+      label: t('dash.receiveDelivery'),
+      hint: t('dash.receiveDeliveryHint'),
+      icon: PackageCheck,
+    },
+    {
+      to: '/stock/adjust',
+      label: t('dash.adjustStock'),
+      hint: t('dash.adjustStockHint'),
+      icon: SlidersHorizontal,
+    },
+  ]
+
   return (
     <div>
       <div className="mb-5">
         <h1 className="text-2xl font-bold tracking-tight">
-          Hello{name ? `, ${name}` : ''}
+          {name ? t('dash.helloName', { name }) : t('dash.hello')}
         </h1>
-        <p className="text-muted">Here is what is happening at ASC Fruits today.</p>
+        <p className="text-muted">{t('dash.subtitle')}</p>
       </div>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <StatCard
-          label="Total stock"
+          label={t('dash.totalStock')}
           value={stock.isLoading ? '...' : formatKg(totalKg)}
           icon={<Scale className="size-6" />}
         />
         <Link to="/orders?status=pending" className="block">
           <StatCard
-            label="Pending orders"
+            label={t('dash.pendingOrders')}
             value={pending.isLoading ? '...' : pending.data}
             icon={<ClipboardList className="size-6" />}
             tone={pending.data ? 'amber' : 'neutral'}
           />
         </Link>
         <StatCard
-          label="Received today"
+          label={t('dash.receivedToday')}
           value={today.isLoading ? '...' : formatKg(receivedToday)}
           icon={<ArrowDownToLine className="size-6" />}
           tone="neutral"
@@ -77,20 +89,18 @@ export function Dashboard() {
       </div>
 
       <Section
-        title="Latest stock movements"
+        title={t('dash.latestMovements')}
         bodyClassName="p-0"
         actions={
           <Link to="/stock/movements" className="text-xs font-semibold text-primary">
-            View all
+            {t('dash.viewAll')}
           </Link>
         }
       >
         {recent.isLoading ? (
           <Spinner />
         ) : (recent.data ?? []).length === 0 ? (
-          <div className="px-5 py-10 text-center text-muted">
-            No stock movements yet. Start by creating an order or receiving a delivery.
-          </div>
+          <div className="px-5 py-10 text-center text-muted">{t('dash.noMovements')}</div>
         ) : (
           <ul className="divide-y divide-border">
             {(recent.data ?? []).map((m) => {
@@ -98,19 +108,29 @@ export function Dashboard() {
               const n = Number(m.qty_kg)
               return (
                 <li key={m.id} className="flex items-center gap-3 px-5 py-3">
-                  <Thumb emoji={v?.emoji || v?.fruit.emoji} imagePath={v?.image_path || v?.fruit.image_path} size="sm" />
+                  <Thumb
+                    emoji={v?.emoji || v?.fruit.emoji}
+                    imagePath={v?.image_path || v?.fruit.image_path}
+                    size="sm"
+                  />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold">{v?.name ?? 'Unknown'}</div>
+                    <div className="truncate font-semibold">
+                      {displayName(v, t('common.unknown'))}
+                    </div>
                     <div className="text-2xs text-muted">{formatDateTime(m.created_at)}</div>
                   </div>
                   {m.type === 'receipt' ? (
-                    <Chip tone="green">Received</Chip>
+                    <Chip tone="green">{t('movement.received')}</Chip>
                   ) : (
-                    <Chip tone={m.reason === 'wastage' ? 'red' : 'amber'}>{m.reason}</Chip>
+                    <Chip tone={m.reason === 'wastage' ? 'red' : 'amber'}>
+                      {m.reason ? t(`reason.${m.reason}`) : t('reason.adjustment')}
+                    </Chip>
                   )}
-                  <span className={`num w-24 text-right font-semibold ${n < 0 ? 'text-danger' : 'text-primary'}`}>
+                  <span
+                    className={`num w-24 text-right font-semibold ${n < 0 ? 'text-danger' : 'text-primary'}`}
+                  >
                     {n > 0 ? '+' : ''}
-                    {formatNumber(n)} kg
+                    {formatNumber(n)} {t('common.kg')}
                   </span>
                 </li>
               )

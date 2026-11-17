@@ -4,48 +4,20 @@ import { Link } from 'react-router'
 import { DataTable } from '../../components/DataTable'
 import { columnHelper } from '../../lib/table'
 import { ErrorBox, PageHeader, Spinner, StatCard, Thumb } from '../../components/ui'
+import { useLanguage } from '../../i18n/LanguageProvider'
 import { formatDateTime, formatKg, formatNumber } from '../../lib/format'
 import { useCurrentStock } from '../../lib/queries'
 import type { CurrentStock } from '../../lib/types'
 
-const h = columnHelper<CurrentStock>()
-const columns = h.columns([
-  h.accessor('variety_name', {
-    header: 'Variety',
-    cell: (c) => (
-      <div className="flex items-center gap-2.5">
-        <Thumb
-          emoji={c.row.original.variety_emoji || c.row.original.fruit_emoji}
-          imagePath={c.row.original.variety_image_path || c.row.original.fruit_image_path}
-          size="sm"
-        />
-        <b>{c.getValue()}</b>
-      </div>
-    ),
-  }),
-  h.accessor('fruit_name', { header: 'Fruit' }),
-  h.accessor('last_movement_at', {
-    header: 'Last movement',
-    cell: (c) => <span className="text-muted">{formatDateTime(c.getValue())}</span>,
-  }),
-  h.accessor('qty_kg', {
-    header: 'In stock (kg)',
-    meta: { align: 'right' },
-    cell: (c) => {
-      const n = Number(c.getValue())
-      return (
-        <span className={`font-semibold ${n < 0 ? 'text-danger' : n === 0 ? 'text-muted' : ''}`}>
-          {formatNumber(n)}
-        </span>
-      )
-    },
-  }),
-])
+type Row = CurrentStock & { varietyLabel: string; fruitLabel: string }
+
+const h = columnHelper<Row>()
 
 const linkBtn =
   'inline-flex h-11 items-center gap-2 rounded-button border border-border bg-surface px-4 text-sm font-semibold text-ink transition hover:bg-surface-low'
 
 export function StockDashboard() {
+  const { t, displayName } = useLanguage()
   const stock = useCurrentStock()
   const [openFruit, setOpenFruit] = useState<string | null>(null)
 
@@ -58,7 +30,7 @@ export function StockDashboard() {
     for (const r of data) {
       const f = byFruit.get(r.fruit_id) ?? {
         id: r.fruit_id,
-        name: r.fruit_name,
+        name: displayName({ name: r.fruit_name, name_ta: r.fruit_name_ta }),
         emoji: r.fruit_emoji,
         image: r.fruit_image_path,
         kg: 0,
@@ -74,11 +46,55 @@ export function StockDashboard() {
       inStock: data.filter((r) => Number(r.qty_kg) > 0).length,
       negatives: data.filter((r) => Number(r.qty_kg) < 0),
     }
-  }, [stock.data])
+  }, [stock.data, displayName])
 
-  const tableRows = useMemo(
-    () => (stock.data ?? []).filter((r) => r.last_movement_at),
-    [stock.data],
+  const tableRows = useMemo<Row[]>(
+    () =>
+      (stock.data ?? [])
+        .filter((r) => r.last_movement_at)
+        .map((r) => ({
+          ...r,
+          varietyLabel: displayName({ name: r.variety_name, name_ta: r.variety_name_ta }),
+          fruitLabel: displayName({ name: r.fruit_name, name_ta: r.fruit_name_ta }),
+        })),
+    [stock.data, displayName],
+  )
+
+  const columns = useMemo(
+    () =>
+      h.columns([
+        h.accessor('varietyLabel', {
+          header: t('stock.colVariety'),
+          cell: (c) => (
+            <div className="flex items-center gap-2.5">
+              <Thumb
+                emoji={c.row.original.variety_emoji || c.row.original.fruit_emoji}
+                imagePath={c.row.original.variety_image_path || c.row.original.fruit_image_path}
+                size="sm"
+              />
+              <b>{c.getValue()}</b>
+            </div>
+          ),
+        }),
+        h.accessor('fruitLabel', { header: t('stock.colFruit') }),
+        h.accessor('last_movement_at', {
+          header: t('stock.colLastMovement'),
+          cell: (c) => <span className="text-muted">{formatDateTime(c.getValue())}</span>,
+        }),
+        h.accessor('qty_kg', {
+          header: t('stock.colInStock'),
+          meta: { align: 'right' },
+          cell: (c) => {
+            const n = Number(c.getValue())
+            return (
+              <span className={`font-semibold ${n < 0 ? 'text-danger' : n === 0 ? 'text-muted' : ''}`}>
+                {formatNumber(n)}
+              </span>
+            )
+          },
+        }),
+      ]),
+    [t],
   )
 
   if (stock.isLoading) return <Spinner />
@@ -86,21 +102,21 @@ export function StockDashboard() {
   return (
     <div>
       <PageHeader
-        title="Stock"
-        subtitle="Live godown stock, by fruit and variety."
+        title={t('stock.title')}
+        subtitle={t('stock.subtitle')}
         actions={
           <>
             <Link
               to="/stock/adjust"
               className="inline-flex h-11 items-center gap-2 rounded-button bg-[linear-gradient(135deg,#3A9A62,#2E7D4F)] px-4 text-sm font-semibold text-white shadow-[0_2px_8px_rgba(46,125,79,0.28)] transition hover:-translate-y-px"
             >
-              <SlidersHorizontal className="size-4" /> Adjust stock
+              <SlidersHorizontal className="size-4" /> {t('stock.adjust')}
             </Link>
             <Link to="/stock/movements" className={linkBtn}>
-              <History className="size-4" /> Movements
+              <History className="size-4" /> {t('stock.movements')}
             </Link>
             <Link to="/stock/report" className={linkBtn}>
-              <FileText className="size-4" /> Daily report
+              <FileText className="size-4" /> {t('stock.dailyReport')}
             </Link>
           </>
         }
@@ -108,15 +124,15 @@ export function StockDashboard() {
       <ErrorBox error={stock.error} />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Total stock" value={formatKg(totalKg)} icon={<Scale className="size-6" />} />
+        <StatCard label={t('stock.totalStock')} value={formatKg(totalKg)} icon={<Scale className="size-6" />} />
         <StatCard
-          label="Varieties in stock"
+          label={t('stock.varietiesInStock')}
           value={inStock}
           icon={<Layers className="size-6" />}
           tone="neutral"
         />
         <StatCard
-          label="Needs attention"
+          label={t('stock.needsAttention')}
           value={negatives.length}
           icon={<AlertTriangle className="size-6" />}
           tone={negatives.length ? 'amber' : 'neutral'}
@@ -125,8 +141,11 @@ export function StockDashboard() {
 
       {negatives.length > 0 && (
         <div className="mb-5 rounded-card border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
-          <b>Negative stock:</b> {negatives.map((n) => n.variety_name).join(', ')}. Please check and
-          record a correction.
+          {t('stock.negative', {
+            names: negatives
+              .map((n) => displayName({ name: n.variety_name, name_ta: n.variety_name_ta }))
+              .join(', '),
+          })}
         </div>
       )}
 
@@ -152,7 +171,7 @@ export function StockDashboard() {
                 <ul className="divide-y divide-border border-t border-border bg-surface-low/50">
                   {f.items.map((v) => (
                     <li key={v.variety_id} className="flex items-center justify-between px-4 py-2.5">
-                      <span>{v.variety_name}</span>
+                      <span>{displayName({ name: v.variety_name, name_ta: v.variety_name_ta })}</span>
                       <span
                         className={`num font-semibold ${Number(v.qty_kg) < 0 ? 'text-danger' : Number(v.qty_kg) === 0 ? 'text-muted' : ''}`}
                       >
@@ -167,13 +186,13 @@ export function StockDashboard() {
         })}
       </div>
 
-      <h2 className="mb-3 text-lg font-semibold">All varieties</h2>
+      <h2 className="mb-3 text-lg font-semibold">{t('stock.allVarieties')}</h2>
       <DataTable
         data={tableRows}
         columns={columns}
-        searchPlaceholder="Search variety or fruit"
+        searchPlaceholder={t('stock.search')}
         initialSorting={[{ id: 'qty_kg', desc: true }]}
-        empty="No stock recorded yet. Receive a delivery to add stock."
+        empty={t('stock.empty')}
       />
     </div>
   )

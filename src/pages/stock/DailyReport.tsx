@@ -2,6 +2,7 @@ import { AlertTriangle, ChevronLeft, ChevronRight, Printer } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { DataTable } from '../../components/DataTable'
 import { columnHelper } from '../../lib/table'
+import { useLanguage } from '../../i18n/LanguageProvider'
 import { Button, ErrorBox, PageHeader, Spinner, StatCard } from '../../components/ui'
 import { addDays, formatDate, formatKg, formatNumber, todayISO } from '../../lib/format'
 import { useDailyReport } from '../../lib/queries'
@@ -19,33 +20,59 @@ const num = (n: number, signed = false) => {
     </span>
   )
 }
-const columns = h.columns([
-  h.accessor('variety_name', {
-    header: 'Item',
-    cell: (c) => (
-      <div className="flex items-center gap-2">
-        <span className="text-lg">{c.row.original.fruit_emoji}</span>
-        <div>
-          <div className="font-semibold">{c.getValue()}</div>
-          <div className="text-2xs text-muted">{c.row.original.fruit_name}</div>
-        </div>
-      </div>
-    ),
-  }),
-  h.accessor('opening_kg', { header: 'Opening', meta: { align: 'right' }, cell: (c) => num(c.getValue()) }),
-  h.accessor('received_kg', { header: 'Received', meta: { align: 'right' }, cell: (c) => num(c.getValue(), true) }),
-  h.accessor('adjusted_kg', { header: 'Adjusted', meta: { align: 'right' }, cell: (c) => num(c.getValue(), true) }),
-  h.accessor('closing_kg', {
-    header: 'Closing',
-    meta: { align: 'right' },
-    cell: (c) => <b className={Number(c.getValue()) < 0 ? 'text-danger' : ''}>{formatNumber(c.getValue())}</b>,
-  }),
-])
-
 export function DailyReport() {
+  const { t, displayName } = useLanguage()
   const [day, setDay] = useState(todayISO())
   const report = useDailyReport(day)
   const rows = useMemo(() => report.data ?? [], [report.data])
+
+  const columns = useMemo(
+    () =>
+      h.columns([
+        h.accessor('variety_name', {
+          header: t('report.colItem'),
+          cell: (c) => (
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{c.row.original.fruit_emoji}</span>
+              <div>
+                <div className="font-semibold">
+                  {displayName({ name: c.getValue(), name_ta: c.row.original.variety_name_ta })}
+                </div>
+                <div className="text-2xs text-muted">
+                  {displayName({
+                    name: c.row.original.fruit_name,
+                    name_ta: c.row.original.fruit_name_ta,
+                  })}
+                </div>
+              </div>
+            </div>
+          ),
+        }),
+        h.accessor('opening_kg', {
+          header: t('report.colOpening'),
+          meta: { align: 'right' },
+          cell: (c) => num(c.getValue()),
+        }),
+        h.accessor('received_kg', {
+          header: t('report.colReceived'),
+          meta: { align: 'right' },
+          cell: (c) => num(c.getValue(), true),
+        }),
+        h.accessor('adjusted_kg', {
+          header: t('report.colAdjusted'),
+          meta: { align: 'right' },
+          cell: (c) => num(c.getValue(), true),
+        }),
+        h.accessor('closing_kg', {
+          header: t('report.colClosing'),
+          meta: { align: 'right' },
+          cell: (c) => (
+            <b className={Number(c.getValue()) < 0 ? 'text-danger' : ''}>{formatNumber(c.getValue())}</b>
+          ),
+        }),
+      ]),
+    [t, displayName],
+  )
 
   const totals = useMemo(
     () =>
@@ -70,17 +97,17 @@ export function DailyReport() {
   return (
     <div>
       <PageHeader
-        title="Daily report"
-        subtitle={`End-of-day stock summary for ${formatDate(`${day}T12:00:00+05:30`)}`}
+        title={t('report.title')}
+        subtitle={t('report.subtitle', { date: formatDate(`${day}T12:00:00+05:30`) })}
         actions={
           <Button variant="secondary" onClick={() => window.print()}>
-            <Printer className="size-4" /> Print
+            <Printer className="size-4" /> {t('common.print')}
           </Button>
         }
       />
 
       <div className="no-print mb-5 flex items-center gap-2">
-        <Button variant="secondary" onClick={() => setDay(addDays(day, -1))} aria-label="Previous day">
+        <Button variant="secondary" onClick={() => setDay(addDays(day, -1))} aria-label={t('report.prevDay')}>
           <ChevronLeft className="size-4" />
         </Button>
         <input
@@ -94,13 +121,13 @@ export function DailyReport() {
           variant="secondary"
           onClick={() => setDay(addDays(day, 1))}
           disabled={day >= todayISO()}
-          aria-label="Next day"
+          aria-label={t('report.nextDay')}
         >
           <ChevronRight className="size-4" />
         </Button>
         {day !== todayISO() && (
           <Button variant="ghost" onClick={() => setDay(todayISO())}>
-            Today
+            {t('common.today')}
           </Button>
         )}
       </div>
@@ -108,28 +135,28 @@ export function DailyReport() {
       <ErrorBox error={report.error} />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Received" value={formatKg(totals.received)} icon={<ArrowDownToLine className="size-6" />} />
+        <StatCard label={t('report.received')} value={formatKg(totals.received)} icon={<ArrowDownToLine className="size-6" />} />
         <StatCard
-          label="Adjusted / wastage"
+          label={t('report.adjusted')}
           value={formatKg(totals.adjusted)}
           icon={<Trash2 className="size-6" />}
           tone={totals.adjusted < 0 ? 'amber' : 'neutral'}
         />
-        <StatCard label="Closing stock" value={formatKg(totals.closing)} icon={<Scale className="size-6" />} tone="neutral" />
+        <StatCard label={t('report.closing')} value={formatKg(totals.closing)} icon={<Scale className="size-6" />} tone="neutral" />
       </div>
 
       {alerts.length > 0 && (
         <div className="mb-5 rounded-card border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
           <div className="mb-1 flex items-center gap-2 font-semibold">
-            <AlertTriangle className="size-4" /> Variance alerts
+            <AlertTriangle className="size-4" /> {t('report.alerts')}
           </div>
           <ul className="list-disc pl-5">
             {alerts.map((a) => (
               <li key={a.variety_id}>
-                {a.variety_name}:{' '}
+                {displayName({ name: a.variety_name, name_ta: a.variety_name_ta })}:{' '}
                 {Number(a.closing_kg) < 0
-                  ? `closing stock is negative (${formatKg(a.closing_kg)})`
-                  : `adjusted ${formatKg(a.adjusted_kg)}, more than 5% of available stock`}
+                  ? t('report.negativeClosing', { kg: formatKg(a.closing_kg) })
+                  : t('report.adjustedAlert', { kg: formatKg(a.adjusted_kg) })}
               </li>
             ))}
           </ul>
@@ -142,11 +169,11 @@ export function DailyReport() {
         <DataTable
           data={rows}
           columns={columns}
-          empty="No stock movements up to this day."
+          empty={t('report.empty')}
           footer={
             rows.length > 0 ? (
               <tr className="font-semibold">
-                <td className="px-3 py-3">Total</td>
+                <td className="px-3 py-3">{t('common.total')}</td>
                 <td className="num px-3 py-3 text-right">{formatNumber(totals.opening)}</td>
                 <td className="num px-3 py-3 text-right">{formatNumber(totals.received)}</td>
                 <td className="num px-3 py-3 text-right">{formatNumber(totals.adjusted)}</td>

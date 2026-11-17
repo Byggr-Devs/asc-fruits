@@ -88,7 +88,7 @@ export function useOrders(status: OrderStatus | 'all') {
     queryFn: () => {
       let q = supabase
         .from('orders')
-        .select('*, vendor:vendors(id, name), order_items(qty_kg, line_total)')
+        .select('*, vendor:vendors(id, name, name_ta), order_items(qty_kg, line_total)')
         .order('created_at', { ascending: false })
         .limit(500)
       if (status !== 'all') q = q.eq('status', status)
@@ -150,7 +150,7 @@ export function useDeliveries() {
         supabase
           .from('deliveries')
           .select(
-            '*, vendor:vendors(id, name), delivery_items(variety_id, qty_kg), orders(id, order_no)',
+            '*, vendor:vendors(id, name, name_ta), delivery_items(variety_id, qty_kg), orders(id, order_no)',
           )
           .order('received_at', { ascending: false })
           .limit(500),

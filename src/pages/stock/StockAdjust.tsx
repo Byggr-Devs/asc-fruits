@@ -5,18 +5,20 @@ import { Link, useNavigate } from 'react-router'
 import { useToast } from '../../components/toast'
 import { Button, PageHeader, Section, Spinner, Thumb } from '../../components/ui'
 import { VarietyPicker } from '../../components/VarietyPicker'
+import { useLanguage } from '../../i18n/LanguageProvider'
 import { formatKg, parseQty, round3 } from '../../lib/format'
 import { keys, useCatalog, useCurrentStock, type CatalogVariety } from '../../lib/queries'
 import { errorMessage, supabase } from '../../lib/supabase'
 import type { AdjustmentReason } from '../../lib/types'
 
-const reasons: { id: AdjustmentReason; label: string; hint: string }[] = [
-  { id: 'wastage', label: 'Wastage', hint: 'Spoiled, damaged or thrown away' },
-  { id: 'correction', label: 'Correction', hint: 'Fixing a counting mistake' },
-  { id: 'other', label: 'Other', hint: 'Anything else, add a note' },
+const reasons: { id: AdjustmentReason; labelKey: string; hintKey: string }[] = [
+  { id: 'wastage', labelKey: 'reason.wastage', hintKey: 'reason.wastageHint' },
+  { id: 'correction', labelKey: 'reason.correction', hintKey: 'reason.correctionHint' },
+  { id: 'other', labelKey: 'reason.other', hintKey: 'reason.otherHint' },
 ]
 
 export function StockAdjust() {
+  const { t, displayName } = useLanguage()
   const catalog = useCatalog()
   const stock = useCurrentStock()
   const qc = useQueryClient()
@@ -42,9 +44,9 @@ export function StockAdjust() {
 
   async function save() {
     setErr(null)
-    if (!variety) return setErr('Choose a variety.')
-    if (amount <= 0) return setErr('Enter how many kg.')
-    if (reason === 'other' && !note.trim()) return setErr('Please add a note for "Other".')
+    if (!variety) return setErr(t('stock.chooseVariety'))
+    if (amount <= 0) return setErr(t('stock.enterKg'))
+    if (reason === 'other' && !note.trim()) return setErr(t('stock.noteRequired'))
     setBusy(true)
     const { error } = await supabase.from('stock_movements').insert({
       variety_id: variety.id,
@@ -54,9 +56,14 @@ export function StockAdjust() {
       note: note.trim() || null,
     })
     setBusy(false)
-    if (error) return setErr(errorMessage(error))
+    if (error) return setErr(errorMessage(error, t))
     await qc.invalidateQueries({ queryKey: keys.stock })
-    toast(`${variety.name}: ${direction === 'remove' ? 'removed' : 'added'} ${formatKg(amount)}`)
+    toast(
+      t(direction === 'remove' ? 'stock.toastRemoved' : 'stock.toastAdded', {
+        name: displayName(variety),
+        kg: formatKg(amount),
+      }),
+    )
     navigate('/stock')
   }
 
@@ -68,12 +75,12 @@ export function StockAdjust() {
         to="/stock"
         className="mb-3 inline-flex items-center gap-1.5 text-xs font-semibold text-muted hover:text-ink"
       >
-        <ArrowLeft className="size-4" /> Stock
+        <ArrowLeft className="size-4" /> {t('stock.back')}
       </Link>
-      <PageHeader title="Adjust stock" subtitle="Record wastage or fix a count." />
+      <PageHeader title={t('stock.adjustTitle')} subtitle={t('stock.adjustSubtitle')} />
 
       {!variety ? (
-        <Section title="Which item?">
+        <Section title={t('stock.whichItem')}>
           <VarietyPicker fruits={catalog.fruits} varieties={catalog.varieties} onPick={setVariety} />
         </Section>
       ) : (
@@ -86,13 +93,13 @@ export function StockAdjust() {
                 size="lg"
               />
               <div className="flex-1">
-                <div className="text-md font-semibold">{variety.name}</div>
+                <div className="text-md font-semibold">{displayName(variety)}</div>
                 <div className="text-muted">
-                  In stock now: <b className="num text-ink">{formatKg(current)}</b>
+                  {t('stock.inStockNow')} <b className="num text-ink">{formatKg(current)}</b>
                 </div>
               </div>
               <Button variant="secondary" size="sm" onClick={() => setVariety(null)}>
-                Change
+                {t('common.change')}
               </Button>
             </div>
           </Section>
@@ -105,19 +112,19 @@ export function StockAdjust() {
                   onClick={() => setDirection('remove')}
                   tone="danger"
                   icon={<Minus className="size-5" />}
-                  label="Remove stock"
+                  label={t('stock.removeStock')}
                 />
                 <DirectionButton
                   active={direction === 'add'}
                   onClick={() => setDirection('add')}
                   tone="primary"
                   icon={<Plus className="size-5" />}
-                  label="Add stock"
+                  label={t('stock.addStock')}
                 />
               </div>
 
               <label className="block">
-                <span className="label">Quantity (kg)</span>
+                <span className="label">{t('stock.quantity')}</span>
                 <input
                   className="input num h-14 text-right text-xl"
                   type="number"
@@ -132,7 +139,7 @@ export function StockAdjust() {
               </label>
 
               <div>
-                <span className="label">Reason</span>
+                <span className="label">{t('stock.reason')}</span>
                 <div className="grid gap-2 sm:grid-cols-3">
                   {reasons.map((r) => (
                     <button
@@ -141,15 +148,17 @@ export function StockAdjust() {
                       onClick={() => setReason(r.id)}
                       className={`cursor-pointer rounded-card border-2 p-3 text-left transition ${reason === r.id ? 'border-primary bg-primary-soft' : 'border-border hover:bg-surface-low'}`}
                     >
-                      <div className="font-semibold">{r.label}</div>
-                      <div className="text-2xs text-muted">{r.hint}</div>
+                      <div className="font-semibold">{t(r.labelKey)}</div>
+                      <div className="text-2xs text-muted">{t(r.hintKey)}</div>
                     </button>
                   ))}
                 </div>
               </div>
 
               <label className="block">
-                <span className="label">Note {reason !== 'other' && '(optional)'}</span>
+                <span className="label">
+                  {reason !== 'other' ? t('stock.noteOptional') : t('stock.note')}
+                </span>
                 <input className="input" value={note} onChange={(e) => setNote(e.target.value)} />
               </label>
 
@@ -157,16 +166,18 @@ export function StockAdjust() {
                 <div
                   className={`rounded-card px-4 py-3 ${after < 0 ? 'bg-warning-soft text-warning' : 'bg-surface-low'}`}
                 >
-                  Stock will change from <b className="num">{formatKg(current)}</b> to{' '}
-                  <b className="num">{formatKg(after)}</b>
-                  {after < 0 && '. This is below zero, please double check.'}
+                  {t('stock.willChange', {
+                    from: formatKg(current),
+                    to: formatKg(after),
+                  })}
+                  {after < 0 && t('stock.belowZero')}
                 </div>
               )}
 
               {err && <div className="rounded-input bg-danger-soft px-3 py-2 text-danger">{err}</div>}
 
               <Button size="lg" className="w-full" onClick={save} loading={busy}>
-                <Check className="size-5" /> Save adjustment
+                <Check className="size-5" /> {t('stock.saveAdjustment')}
               </Button>
             </div>
           </Section>

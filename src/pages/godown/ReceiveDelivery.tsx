@@ -8,6 +8,7 @@ import { useToast } from '../../components/toast'
 import { Button, Chip, ErrorBox, Modal, PageHeader, Section, Spinner, Thumb } from '../../components/ui'
 import { VarietyPicker } from '../../components/VarietyPicker'
 import { VendorPicker } from '../../components/VendorPicker'
+import { useLanguage } from '../../i18n/LanguageProvider'
 import { formatDate, formatNumber, orderNo, parseQty, round3 } from '../../lib/format'
 import {
   keys,
@@ -37,6 +38,7 @@ const useMatrix = () => useContext(MatrixContext)!
 const ROW_H = 'h-[64px]'
 
 export function ReceiveDelivery() {
+  const { t, displayName } = useLanguage()
   const [params, setParams] = useSearchParams()
   const vendorId = params.get('vendor')
   const vendors = useVendors()
@@ -134,7 +136,7 @@ export function ReceiveDelivery() {
 
   function review() {
     setErr(null)
-    if (totalReceived <= 0) return setErr('Enter the weight received for at least one item.')
+    if (totalReceived <= 0) return setErr(t('godown.enterWeight'))
     setConfirmOpen(true)
   }
 
@@ -159,14 +161,14 @@ export function ReceiveDelivery() {
     setBusy(false)
     if (error) {
       setConfirmOpen(false)
-      return setErr(errorMessage(error))
+      return setErr(errorMessage(error, t))
     }
     await Promise.all([
       qc.invalidateQueries({ queryKey: keys.orders }),
       qc.invalidateQueries({ queryKey: keys.deliveries }),
       qc.invalidateQueries({ queryKey: keys.stock }),
     ])
-    toast(`Delivery saved. ${formatNumber(totalReceived)} kg added to stock.`)
+    toast(t('godown.saved', { kg: formatNumber(totalReceived) }))
     navigate('/godown')
   }
 
@@ -175,13 +177,13 @@ export function ReceiveDelivery() {
   if (!vendor) {
     return (
       <div>
-        <PageHeader title="Receive delivery" subtitle="Which vendor's goods have arrived?" />
+        <PageHeader title={t('godown.receiveTitle')} subtitle={t('godown.receiveStep1')} />
         <VendorPicker
           vendors={vendors.data ?? []}
           onPick={(v) => pickVendor(v.id)}
           badge={(v) => {
             const n = pendingCountByVendor.get(v.id)
-            return n ? <Chip tone="amber">{n} pending</Chip> : null
+            return n ? <Chip tone="amber">{t('godown.pendingBadge', { count: n })}</Chip> : null
           }}
         />
       </div>
@@ -192,47 +194,47 @@ export function ReceiveDelivery() {
     <MatrixContext.Provider value={matrix}>
       <div className="pb-28">
         <PageHeader
-          title={`Receive from ${vendor.name}`}
-          subtitle="Weigh the goods, enter the kg received, and tick the orders this delivery covers."
+          title={t('godown.receiveFrom', { name: displayName(vendor) })}
+          subtitle={t('godown.receiveSubtitle')}
           actions={
             <Button variant="secondary" onClick={() => pickVendor(null)}>
-              <ArrowLeft className="size-4" /> Change vendor
+              <ArrowLeft className="size-4" /> {t('orders.changeVendor')}
             </Button>
           }
         />
         <ErrorBox error={pending.error} />
 
         {pending.isLoading ? (
-          <Spinner label="Loading pending orders..." />
+          <Spinner label={t('godown.loadingPending')} />
         ) : (
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(340px,0.8fr)_1.2fr]">
             <Section
-              title="Actual stock received"
+              title={t('godown.actualStock')}
               bodyClassName="p-0"
               actions={
                 <div className="flex gap-2">
                   {orders.length > 0 && (
                     <Button variant="secondary" size="sm" onClick={copyExpected}>
-                      <CopyCheck className="size-3.5" /> Fill expected
+                      <CopyCheck className="size-3.5" /> {t('godown.fillExpected')}
                     </Button>
                   )}
                   <Button size="sm" onClick={() => setPickerOpen(true)}>
-                    <Plus className="size-3.5" /> Add item
+                    <Plus className="size-3.5" /> {t('godown.addItem')}
                   </Button>
                 </div>
               }
             >
               {rows.length === 0 ? (
                 <div className="px-5 py-12 text-center text-muted">
-                  No pending orders for this vendor. Use <b>Add item</b> to record what arrived.
+                  {t('godown.noPendingRows')}
                 </div>
               ) : (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-primary-soft text-3xs font-semibold tracking-wider text-primary-ink uppercase">
-                      <th className="h-[52px] px-3 text-left">Fruit / variety</th>
-                      <th className="px-3 text-right">Received (kg)</th>
-                      <th className="px-3 text-right">Vs expected</th>
+                      <th className="h-[52px] px-3 text-left">{t('godown.fruitVariety')}</th>
+                      <th className="px-3 text-right">{t('godown.receivedKg')}</th>
+                      <th className="px-3 text-right">{t('godown.vsExpected')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -251,7 +253,7 @@ export function ReceiveDelivery() {
                                   })
                                 }}
                                 className="ml-1 cursor-pointer text-muted hover:text-danger"
-                                aria-label="Remove"
+                                aria-label={t('godown.remove')}
                               >
                                 <X className="size-3.5" />
                               </button>
@@ -286,24 +288,23 @@ export function ReceiveDelivery() {
                 </table>
               )}
               <div className="border-t border-border p-4">
-                <span className="label">Delivery notes (optional)</span>
+                <span className="label">{t('godown.deliveryNotes')}</span>
                 <input
                   className="input"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="e.g. Vehicle number, damaged crates"
+                  placeholder={t('godown.deliveryNotesPlaceholder')}
                 />
               </div>
             </Section>
 
             <Section
-              title={`Pending orders (${includedOrders.length} of ${orders.length} included)`}
+              title={t('godown.pendingOrders', { included: includedOrders.length, total: orders.length })}
               bodyClassName="p-0"
             >
               {orders.length === 0 ? (
                 <div className="px-5 py-12 text-center text-muted">
-                  There are no pending orders for {vendor.name}. This will be saved as an unplanned
-                  delivery.
+                  {t('godown.noPendingOrders', { name: displayName(vendor) })}
                 </div>
               ) : (
                 <OrderMatrix orders={orders} rows={rows} />
@@ -317,21 +318,27 @@ export function ReceiveDelivery() {
           {err && <div className="mb-2 text-sm text-danger">{err}</div>}
           <div className="flex items-center gap-4 sm:gap-6">
             <div>
-              <div className="text-3xs font-semibold text-muted uppercase">Received</div>
-              <div className="num text-xl font-bold text-primary-ink">{formatNumber(totalReceived)} kg</div>
+              <div className="text-3xs font-semibold text-muted uppercase">{t('godown.receivedLabel')}</div>
+              <div className="num text-xl font-bold text-primary-ink">
+                {formatNumber(totalReceived)} {t('common.kg')}
+              </div>
             </div>
             <div>
-              <div className="text-3xs font-semibold text-muted uppercase">Expected</div>
-              <div className="num text-md font-semibold">{formatNumber(totalExpected)} kg</div>
+              <div className="text-3xs font-semibold text-muted uppercase">{t('godown.expectedLabel')}</div>
+              <div className="num text-md font-semibold">
+                {formatNumber(totalExpected)} {t('common.kg')}
+              </div>
             </div>
             <Button size="lg" className="ml-auto px-4" onClick={review}>
-              <Check className="size-5" /> Complete<span className="hidden sm:inline"> delivery</span>
+              <Check className="size-5" />
+              <span className="sm:hidden">{t('godown.complete')}</span>
+              <span className="hidden sm:inline">{t('godown.completeDelivery')}</span>
             </Button>
             </div>
           </div>
         </div>
 
-        <Modal open={pickerOpen} onClose={() => setPickerOpen(false)} title="Add an item that arrived" wide>
+        <Modal open={pickerOpen} onClose={() => setPickerOpen(false)} title={t('godown.addArrivedItem')} wide>
           <VarietyPicker
             fruits={catalog.fruits}
             varieties={catalog.varieties}
@@ -343,26 +350,28 @@ export function ReceiveDelivery() {
         <Modal
           open={confirmOpen}
           onClose={() => setConfirmOpen(false)}
-          title="Confirm delivery"
+          title={t('godown.confirmTitle')}
           footer={
             <>
               <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
-                Go back
+                {t('godown.goBack')}
               </Button>
               <Button onClick={save} loading={busy}>
-                <Check className="size-4" /> Save delivery
+                <Check className="size-4" /> {t('godown.saveDelivery')}
               </Button>
             </>
           }
         >
           <div className="space-y-4">
             <p>
-              <b className="num">{formatNumber(totalReceived)} kg</b> will be added to godown stock
-              from <b>{vendor.name}</b>.
+              {t('godown.confirmBody', {
+                kg: formatNumber(totalReceived),
+                name: displayName(vendor),
+              })}
             </p>
             {includedOrders.length > 0 && (
               <div>
-                <div className="label">Marked as fulfilled</div>
+                <div className="label">{t('godown.markedFulfilled')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {includedOrders.map((o) => (
                     <Chip key={o.id} tone="green">
@@ -374,7 +383,7 @@ export function ReceiveDelivery() {
             )}
             {excluded.size > 0 && (
               <div>
-                <div className="label">Stay pending</div>
+                <div className="label">{t('godown.stayPending')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {orders
                     .filter((o) => excluded.has(o.id))
@@ -400,6 +409,7 @@ function VarietyLabel({
   variety: CatalogVariety | undefined
   children?: React.ReactNode
 }) {
+  const { t, displayName } = useLanguage()
   return (
     <div className="flex min-w-0 items-center gap-2.5">
       <Thumb
@@ -409,10 +419,10 @@ function VarietyLabel({
       />
       <div className="min-w-0">
         <div className="flex items-center truncate font-semibold">
-          {variety?.name ?? 'Unknown'}
+          {displayName(variety, t('common.unknown'))}
           {children}
         </div>
-        <div className="truncate text-2xs text-muted">{variety?.fruit.name}</div>
+        <div className="truncate text-2xs text-muted">{displayName(variety?.fruit)}</div>
       </div>
     </div>
   )
@@ -427,24 +437,36 @@ function Variance({
   expected: number
   entered: boolean
 }) {
-  if (!entered) return <span className="text-2xs text-muted">{expected ? `${formatNumber(expected)} exp.` : '-'}</span>
+  const { t } = useLanguage()
+  if (!entered) {
+    return (
+      <span className="text-2xs text-muted">
+        {expected ? t('godown.exp', { kg: formatNumber(expected) }) : '-'}
+      </span>
+    )
+  }
   const diff = round3(received - expected)
-  if (expected === 0) return received > 0 ? <Chip tone="green">Extra item</Chip> : <span className="text-muted">-</span>
-  if (diff === 0) return <Chip tone="green">Matches</Chip>
-  if (diff < 0) return <Chip tone="amber">Short {formatNumber(-diff)}</Chip>
-  return <Chip tone="green">+{formatNumber(diff)} extra</Chip>
+  if (expected === 0) return received > 0 ? (
+      <Chip tone="green">{t('godown.extraItem')}</Chip>
+    ) : (
+      <span className="text-muted">-</span>
+    )
+  if (diff === 0) return <Chip tone="green">{t('godown.matches')}</Chip>
+  if (diff < 0) return <Chip tone="amber">{t('godown.short', { kg: formatNumber(-diff) })}</Chip>
+  return <Chip tone="green">{t('godown.extra', { kg: formatNumber(diff) })}</Chip>
 }
 
 const mh = columnHelper<MatrixRow>()
 
 function OrderMatrix({ orders, rows }: { orders: OrderDetail[]; rows: MatrixRow[] }) {
+  const { t } = useLanguage()
   const columns = useMemo(
     () =>
       mh.columns([
         mh.display({
           id: 'variety',
           enableSorting: false,
-          header: () => 'Fruit / variety',
+          header: () => t('godown.fruitVariety'),
           cell: (c) => <VarietyLabel variety={c.row.original.variety} />,
         }),
         ...orders.map((o) =>
@@ -458,11 +480,11 @@ function OrderMatrix({ orders, rows }: { orders: OrderDetail[]; rows: MatrixRow[
         mh.display({
           id: 'expected',
           enableSorting: false,
-          header: () => <span className="block text-right">Expected total</span>,
+          header: () => <span className="block text-right">{t('godown.expectedTotal')}</span>,
           cell: (c) => <ExpectedCell varietyId={c.row.original.varietyId} />,
         }),
       ]),
-    [orders],
+    [orders, t],
   )
 
   const table = useTable({ features: appTableFeatures, columns, data: rows })
@@ -525,6 +547,7 @@ function OrderHeader({ order }: { order: OrderDetail }) {
 }
 
 function OrderCell({ orderId, varietyId }: { orderId: string; varietyId: string }) {
+  const { t } = useLanguage()
   const { excluded, itemsFor, qtyOf, setQty } = useMatrix()
   const items = itemsFor(orderId, varietyId)
   const off = excluded.has(orderId)
@@ -542,7 +565,7 @@ function OrderCell({ orderId, varietyId }: { orderId: string; varietyId: string 
           disabled={off}
           value={qtyOf(item)}
           onChange={(e) => setQty(item.id, e.target.value)}
-          title={`Ordered ${formatNumber(item.qty_kg)} kg`}
+          title={t('godown.orderedKg', { kg: formatNumber(item.qty_kg) })}
         />
       ))}
     </div>

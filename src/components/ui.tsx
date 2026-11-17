@@ -4,6 +4,7 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from 'react'
+import { useT } from '../i18n/LanguageProvider'
 import { imageUrl } from '../lib/supabase'
 import type { OrderStatus } from '../lib/types'
 
@@ -49,11 +50,12 @@ export function Button({
   )
 }
 
-export function Spinner({ label = 'Loading...' }: { label?: string }) {
+export function Spinner({ label }: { label?: string }) {
+  const t = useT()
   return (
     <div className="flex items-center justify-center gap-2 py-16 text-muted">
       <Loader2 className="size-5 animate-spin text-primary" />
-      <span>{label}</span>
+      <span>{label ?? t('common.loading')}</span>
     </div>
   )
 }
@@ -175,13 +177,7 @@ export function Modal({
       >
         <div className="flex items-center justify-between border-b border-border px-[22px] py-[18px]">
           <h3 className="text-md font-semibold">{title}</h3>
-          <button
-            onClick={onClose}
-            className="-mr-2 flex size-10 cursor-pointer items-center justify-center rounded-button text-muted hover:bg-surface-low"
-            aria-label="Close"
-          >
-            <X className="size-5" />
-          </button>
+          <ModalCloseButton onClose={onClose} />
         </div>
         <div className="overflow-y-auto px-[22px] py-5">{children}</div>
         {footer && (
@@ -199,12 +195,26 @@ const statusStyle: Record<OrderStatus, string> = {
 }
 
 export function StatusChip({ status }: { status: OrderStatus }) {
+  const t = useT()
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-semibold capitalize ${statusStyle[status]}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-2xs font-semibold ${statusStyle[status]}`}
     >
-      {status}
+      {t(`status.${status}`)}
     </span>
+  )
+}
+
+function ModalCloseButton({ onClose }: { onClose: () => void }) {
+  const t = useT()
+  return (
+    <button
+      onClick={onClose}
+      className="-mr-2 flex size-10 cursor-pointer items-center justify-center rounded-button text-muted hover:bg-surface-low"
+      aria-label={t('common.close')}
+    >
+      <X className="size-5" />
+    </button>
   )
 }
 

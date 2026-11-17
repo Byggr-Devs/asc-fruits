@@ -1,6 +1,7 @@
 import { useTable, type RowData, type SortingState } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
+import { useT } from '../i18n/LanguageProvider'
 import { appTableFeatures, type AppColumn } from '../lib/table'
 
 export function DataTable<T extends RowData>({
@@ -22,6 +23,7 @@ export function DataTable<T extends RowData>({
   toolbar?: ReactNode
   footer?: ReactNode
 }) {
+  const t = useT()
   const [globalFilter, setGlobalFilter] = useState('')
   const [sorting, setSorting] = useState<SortingState>(initialSorting)
 
@@ -121,7 +123,7 @@ export function DataTable<T extends RowData>({
       </div>
       {rows.length === 0 && (
         <div className="px-4 py-10 text-center text-muted">
-          {globalFilter ? 'No matches for your search.' : (empty ?? 'Nothing here yet.')}
+          {globalFilter ? t('common.noMatches') : (empty ?? t('common.emptyDefault'))}
         </div>
       )}
     </div>

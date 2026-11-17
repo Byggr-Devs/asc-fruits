@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { useToast } from '../../components/toast'
+import { useLanguage } from '../../i18n/LanguageProvider'
 import { Button, ErrorBox, PageHeader, Section, Spinner, Thumb } from '../../components/ui'
 import { VarietyPicker } from '../../components/VarietyPicker'
 import { VendorPicker } from '../../components/VendorPicker'
@@ -13,6 +14,7 @@ import { errorMessage, supabase } from '../../lib/supabase'
 type Line = { key: string; variety: CatalogVariety; qty: string; rate: string }
 
 export function OrderNew() {
+  const { t, displayName } = useLanguage()
   const [params, setParams] = useSearchParams()
   const vendorId = params.get('vendor')
   const vendors = useVendors()
@@ -54,9 +56,9 @@ export function OrderNew() {
   async function save() {
     setErr(null)
     if (!vendor) return
-    if (lines.length === 0) return setErr('Add at least one item.')
+    if (lines.length === 0) return setErr(t('orders.addOneItem'))
     const bad = lines.find((l) => parseQty(l.qty) <= 0)
-    if (bad) return setErr(`Enter the quantity for ${bad.variety.name}.`)
+    if (bad) return setErr(t('orders.enterQty', { name: displayName(bad.variety) }))
 
     setBusy(true)
     try {
@@ -79,10 +81,10 @@ export function OrderNew() {
         throw items.error
       }
       await qc.invalidateQueries({ queryKey: keys.orders })
-      toast('Order created')
+      toast(t('orders.created'))
       navigate(`/orders/${order.id}`, { replace: true })
     } catch (e) {
-      setErr(errorMessage(e))
+      setErr(errorMessage(e, t))
       setBusy(false)
     }
   }
@@ -92,7 +94,7 @@ export function OrderNew() {
   if (!vendor) {
     return (
       <div>
-        <PageHeader title="New order" subtitle="Step 1 of 2: Choose the vendor" />
+        <PageHeader title={t('orders.newTitle')} subtitle={t('orders.step1')} />
         <VendorPicker vendors={vendors.data ?? []} onPick={(v) => setParams({ vendor: v.id })} />
       </div>
     )
@@ -101,17 +103,17 @@ export function OrderNew() {
   return (
     <div className="pb-28">
       <PageHeader
-        title={`New order: ${vendor.name}`}
-        subtitle="Step 2 of 2: Tap fruits to add them, then enter kg and rate."
+        title={t('orders.step2Title', { name: displayName(vendor) })}
+        subtitle={t('orders.step2')}
         actions={
           <Button variant="secondary" onClick={() => setParams({})}>
-            <ArrowLeft className="size-4" /> Change vendor
+            <ArrowLeft className="size-4" /> {t('orders.changeVendor')}
           </Button>
         }
       />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_minmax(380px,0.9fr)]">
-        <Section title="Add items">
+        <Section title={t('orders.addItems')}>
           <VarietyPicker
             fruits={catalog.fruits}
             varieties={catalog.varieties}
@@ -121,10 +123,10 @@ export function OrderNew() {
           />
         </Section>
 
-        <Section title={`Order items (${lines.length})`} bodyClassName="p-0">
+        <Section title={t('orders.orderItems', { count: lines.length })} bodyClassName="p-0">
           {lines.length === 0 ? (
             <div className="px-5 py-12 text-center text-muted">
-              Tap a variety on the left to add it to this order.
+              {t('orders.tapToAdd')}
             </div>
           ) : (
             <ul className="divide-y divide-border">
@@ -139,20 +141,20 @@ export function OrderNew() {
                         size="sm"
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate font-semibold">{l.variety.name}</div>
-                        <div className="text-2xs text-muted">{l.variety.fruit.name}</div>
+                        <div className="truncate font-semibold">{displayName(l.variety)}</div>
+                        <div className="text-2xs text-muted">{displayName(l.variety.fruit)}</div>
                       </div>
                       <button
                         onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
                         className="flex size-10 cursor-pointer items-center justify-center rounded-button text-muted hover:bg-danger-soft hover:text-danger"
-                        aria-label={`Remove ${l.variety.name}`}
+                        aria-label={t('orders.removeItem', { name: displayName(l.variety) })}
                       >
                         <Trash2 className="size-4" />
                       </button>
                     </div>
                     <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2.5">
                       <label>
-                        <span className="label">Qty (kg)</span>
+                        <span className="label">{t('orders.qty')}</span>
                         <input
                           id={`qty-${l.variety.id}`}
                           className="input num text-right text-base"
@@ -166,7 +168,7 @@ export function OrderNew() {
                         />
                       </label>
                       <label>
-                        <span className="label">Rate / kg (₹)</span>
+                        <span className="label">{t('orders.rate')}</span>
                         <input
                           className="input num text-right text-base"
                           type="number"
@@ -179,7 +181,9 @@ export function OrderNew() {
                         />
                       </label>
                       <div className="min-w-[96px] pb-2.5 text-right">
-                        <div className="text-3xs font-semibold text-muted uppercase">Total</div>
+                        <div className="text-3xs font-semibold text-muted uppercase">
+                          {t('orders.lineTotal')}
+                        </div>
                         <div className="num font-semibold">{formatMoney(lineTotal)}</div>
                       </div>
                     </div>
@@ -190,12 +194,12 @@ export function OrderNew() {
           )}
           <div className="border-t border-border p-4">
             <label>
-              <span className="label">Notes for vendor (optional)</span>
+              <span className="label">{t('orders.notes')}</span>
               <textarea
                 className="input h-20 py-2"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. Deliver before 7 AM"
+                placeholder={t('orders.notesPlaceholder')}
               />
             </label>
           </div>
@@ -207,15 +211,19 @@ export function OrderNew() {
           {err && <div className="mb-2 text-sm text-danger">{err}</div>}
           <div className="flex items-center gap-4 sm:gap-6">
           <div>
-            <div className="text-3xs font-semibold text-muted uppercase">Total qty</div>
-            <div className="num text-md font-semibold">{formatNumber(totalKg)} kg</div>
+            <div className="text-3xs font-semibold text-muted uppercase">{t('orders.totalQty')}</div>
+            <div className="num text-md font-semibold">
+              {formatNumber(totalKg)} {t('common.kg')}
+            </div>
           </div>
           <div>
-            <div className="text-3xs font-semibold text-muted uppercase">Grand total</div>
+            <div className="text-3xs font-semibold text-muted uppercase">{t('orders.grandTotal')}</div>
             <div className="num text-2xl font-bold text-primary-ink">{formatMoney(total)}</div>
           </div>
           <Button size="lg" className="ml-auto px-4" onClick={save} loading={busy} disabled={!lines.length}>
-            <Check className="size-5" /> Confirm<span className="hidden sm:inline"> order</span>
+            <Check className="size-5" />
+            <span className="sm:hidden">{t('orders.confirm')}</span>
+            <span className="hidden sm:inline">{t('orders.confirmOrder')}</span>
           </Button>
           </div>
         </div>

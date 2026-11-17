@@ -1,6 +1,7 @@
 export type Fruit = {
   id: string
   name: string
+  name_ta: string | null
   emoji: string
   image_path: string | null
   active: boolean
@@ -11,6 +12,7 @@ export type Variety = {
   id: string
   fruit_id: string
   name: string
+  name_ta: string | null
   emoji: string | null
   image_path: string | null
   active: boolean
@@ -19,6 +21,7 @@ export type Variety = {
 export type Vendor = {
   id: string
   name: string
+  name_ta: string | null
   contact_person: string | null
   phone: string | null
   whatsapp: string | null
@@ -54,7 +57,7 @@ export type Order = {
 }
 
 export type OrderListRow = Order & {
-  vendor: Pick<Vendor, 'id' | 'name'> | null
+  vendor: Pick<Vendor, 'id' | 'name' | 'name_ta'> | null
   order_items: Pick<OrderItem, 'qty_kg' | 'line_total'>[]
 }
 
@@ -74,7 +77,7 @@ export type Delivery = {
 }
 
 export type DeliveryListRow = Delivery & {
-  vendor: Pick<Vendor, 'id' | 'name'> | null
+  vendor: Pick<Vendor, 'id' | 'name' | 'name_ta'> | null
   delivery_items: { variety_id: string; qty_kg: number }[]
   orders: { id: string; order_no: number }[]
 }
@@ -97,10 +100,12 @@ export type StockMovement = {
 export type CurrentStock = {
   variety_id: string
   variety_name: string
+  variety_name_ta: string | null
   variety_emoji: string | null
   variety_image_path: string | null
   fruit_id: string
   fruit_name: string
+  fruit_name_ta: string | null
   fruit_emoji: string
   fruit_image_path: string | null
   qty_kg: number
@@ -110,7 +115,9 @@ export type CurrentStock = {
 export type DailyReportRow = {
   variety_id: string
   variety_name: string
+  variety_name_ta: string | null
   fruit_name: string
+  fruit_name_ta: string | null
   fruit_emoji: string
   opening_kg: number
   received_kg: number

@@ -1,5 +1,6 @@
 import { Check, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useLanguage } from '../i18n/LanguageProvider'
 import type { CatalogVariety } from '../lib/queries'
 import type { Fruit } from '../lib/types'
 import { Thumb } from './ui'
@@ -21,6 +22,7 @@ export function VarietyPicker({
   selectedIds?: Set<string>
   allowedIds?: Set<string>
 }) {
+  const { t, displayName } = useLanguage()
   const restrictable = !!allowedIds && allowedIds.size > 0
   const [showAll, setShowAll] = useState(!restrictable)
   const [fruitId, setFruitId] = useState<string | null>(null)
@@ -44,7 +46,13 @@ export function VarietyPicker({
 
   const q = query.trim().toLowerCase()
   const shown = q
-    ? pool.filter((v) => v.name.toLowerCase().includes(q) || v.fruit.name.toLowerCase().includes(q))
+    ? pool.filter((v) => {
+        const names = [v.name, v.name_ta, v.fruit.name, v.fruit.name_ta]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+        return names.includes(q)
+      })
     : pool.filter((v) => v.fruit_id === activeFruitId)
 
   return (
@@ -54,7 +62,7 @@ export function VarietyPicker({
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
           <input
             className="input pl-9"
-            placeholder="Search fruit or variety"
+            placeholder={t('picker.searchFruit')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -67,7 +75,7 @@ export function VarietyPicker({
               checked={showAll}
               onChange={(e) => setShowAll(e.target.checked)}
             />
-            Show all varieties
+            {t('picker.showAll')}
           </label>
         )}
       </div>
@@ -76,6 +84,7 @@ export function VarietyPicker({
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
           {visibleFruits.map((f) => {
             const active = f.id === activeFruitId
+            const label = displayName(f)
             return (
               <button
                 key={f.id}
@@ -87,8 +96,8 @@ export function VarietyPicker({
                     : 'border-transparent bg-surface-low hover:border-border'
                 }`}
               >
-                <Thumb emoji={f.emoji} imagePath={f.image_path} alt={f.name} />
-                <span className="text-xs font-semibold whitespace-nowrap">{f.name}</span>
+                <Thumb emoji={f.emoji} imagePath={f.image_path} alt={label} />
+                <span className="text-xs font-semibold whitespace-nowrap">{label}</span>
               </button>
             )
           })}
@@ -97,13 +106,15 @@ export function VarietyPicker({
 
       {shown.length === 0 ? (
         <div className="rounded-card bg-surface-low px-4 py-8 text-center text-muted">
-          No varieties found.
-          {restrictable && !showAll && ' Try "Show all varieties".'}
+          {t('picker.noVarieties')}
+          {restrictable && !showAll && t('picker.tryShowAll')}
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
           {shown.map((v) => {
             const selected = selectedIds?.has(v.id)
+            const vName = displayName(v)
+            const fName = displayName(v.fruit)
             return (
               <button
                 key={v.id}
@@ -116,13 +127,13 @@ export function VarietyPicker({
                 <Thumb
                   emoji={v.emoji || v.fruit.emoji}
                   imagePath={v.image_path || v.fruit.image_path}
-                  alt={v.name}
+                  alt={vName}
                 />
                 <span className="min-w-0">
                   <span className="line-clamp-2 text-sm leading-tight font-semibold break-words">
-                    {v.name}
+                    {vName}
                   </span>
-                  <span className="block truncate text-2xs text-muted">{v.fruit.name}</span>
+                  <span className="block truncate text-2xs text-muted">{fName}</span>
                 </span>
                 {selected && (
                   <span className="absolute top-1.5 right-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-white">

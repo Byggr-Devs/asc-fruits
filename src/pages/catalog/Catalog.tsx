@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ImagePlus, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useToast } from '../../components/toast'
+import { useLanguage, varietyCountLabel } from '../../i18n/LanguageProvider'
 import {
   Button,
   Chip,
@@ -25,6 +26,7 @@ type Editing =
   | { kind: 'variety'; item: Variety | null; fruitId: string }
 
 export function Catalog() {
+  const { t, displayName } = useLanguage()
   const { fruits, varieties, isLoading, error } = useCatalog()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
@@ -37,11 +39,11 @@ export function Catalog() {
   return (
     <div>
       <PageHeader
-        title="Fruits & Varieties"
-        subtitle="Tap a fruit to see and manage its varieties."
+        title={t('catalog.title')}
+        subtitle={t('catalog.subtitle')}
         actions={
           <Button onClick={() => setEditing({ kind: 'fruit', item: null })}>
-            <Plus className="size-4" /> Add fruit
+            <Plus className="size-4" /> {t('catalog.addFruit')}
           </Button>
         }
       />
@@ -57,11 +59,9 @@ export function Catalog() {
               onClick={() => setSelectedId(f.id)}
               className={`flex cursor-pointer flex-col items-center gap-2 rounded-card border-2 bg-surface p-3 transition ${active ? 'border-primary bg-primary-soft' : 'border-border hover:border-primary/40'} ${f.active ? '' : 'opacity-50'}`}
             >
-              <Thumb emoji={f.emoji} imagePath={f.image_path} size="lg" alt={f.name} />
-              <span className="text-center text-sm leading-tight font-semibold">{f.name}</span>
-              <span className="text-2xs text-muted">
-                {count} {count === 1 ? 'variety' : 'varieties'}
-              </span>
+              <Thumb emoji={f.emoji} imagePath={f.image_path} size="lg" alt={displayName(f)} />
+              <span className="text-center text-sm leading-tight font-semibold">{displayName(f)}</span>
+              <span className="text-2xs text-muted">{varietyCountLabel(t, count)}</span>
             </button>
           )
         })}
@@ -70,7 +70,7 @@ export function Catalog() {
           className="flex min-h-[140px] cursor-pointer flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-border text-muted transition hover:border-primary hover:text-primary"
         >
           <Plus className="size-7" />
-          <span className="text-xs font-semibold">Add fruit</span>
+          <span className="text-xs font-semibold">{t('catalog.addFruit')}</span>
         </button>
       </div>
 
@@ -80,8 +80,8 @@ export function Catalog() {
           title={
             <span className="flex items-center gap-2">
               <Thumb emoji={selected.emoji} imagePath={selected.image_path} size="sm" />
-              {selected.name} varieties
-              {!selected.active && <Chip>Inactive</Chip>}
+              {t('catalog.fruitVarieties', { name: displayName(selected) })}
+              {!selected.active && <Chip>{t('common.inactive')}</Chip>}
             </span>
           }
           actions={
@@ -91,19 +91,21 @@ export function Catalog() {
                 size="sm"
                 onClick={() => setEditing({ kind: 'fruit', item: selected })}
               >
-                <Pencil className="size-3.5" /> Edit fruit
+                <Pencil className="size-3.5" /> {t('catalog.editFruit')}
               </Button>
               <Button
                 size="sm"
                 onClick={() => setEditing({ kind: 'variety', item: null, fruitId: selected.id })}
               >
-                <Plus className="size-3.5" /> Add variety
+                <Plus className="size-3.5" /> {t('catalog.addVariety')}
               </Button>
             </div>
           }
         >
           {fruitVarieties.length === 0 ? (
-            <EmptyState icon={selected.emoji} title="No varieties yet" hint="Add the first variety." />
+            <EmptyState
+              icon={selected.emoji} title={t('catalog.noVarieties')}
+              hint={t('catalog.noVarietiesHint')} />
           ) : (
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {fruitVarieties.map((v) => (
@@ -115,11 +117,13 @@ export function Catalog() {
                   <Thumb
                     emoji={v.emoji || selected.emoji}
                     imagePath={v.image_path || selected.image_path}
-                    alt={v.name}
+                    alt={displayName(v)}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{v.name}</span>
-                    {!v.active && <span className="text-2xs text-muted">Inactive</span>}
+                    <span className="block truncate font-semibold">{displayName(v)}</span>
+                    {!v.active && (
+                      <span className="text-2xs text-muted">{t('common.inactive')}</span>
+                    )}
                   </span>
                   <Pencil className="size-4 text-muted" />
                 </button>
@@ -152,11 +156,13 @@ function CatalogItemModal({
   onClose: () => void
   onSaved: (id: string) => void
 }) {
+  const { t, displayName } = useLanguage()
   const qc = useQueryClient()
   const toast = useToast()
   const item = editing.item
   const isFruit = editing.kind === 'fruit'
   const [name, setName] = useState(item?.name ?? '')
+  const [nameTa, setNameTa] = useState(item?.name_ta ?? '')
   const [emoji, setEmoji] = useState(item?.emoji ?? (isFruit ? '🍎' : ''))
   const [imagePath, setImagePath] = useState<string | null>(item?.image_path ?? null)
   const [active, setActive] = useState(item?.active ?? true)
@@ -167,7 +173,6 @@ function CatalogItemModal({
   const fileRef = useRef<HTMLInputElement>(null)
 
   const table = isFruit ? 'fruits' : 'varieties'
-  const label = isFruit ? 'fruit' : 'variety'
 
   async function onFile(file: File | undefined) {
     if (!file) return
@@ -176,18 +181,19 @@ function CatalogItemModal({
     try {
       setImagePath(await uploadImage(file, isFruit ? 'fruits' : 'varieties'))
     } catch (e) {
-      setErr(errorMessage(e))
+      setErr(errorMessage(e, t))
     } finally {
       setUploading(false)
     }
   }
 
   async function save() {
-    if (!name.trim()) return setErr('Please enter a name.')
+    if (!name.trim()) return setErr(t('catalog.enterName'))
     setBusy(true)
     setErr(null)
     const row: Record<string, unknown> = {
       name: name.trim(),
+      name_ta: nameTa.trim() || null,
       emoji: emoji.trim() || (isFruit ? '🍎' : null),
       image_path: imagePath,
       active,
@@ -199,22 +205,22 @@ function CatalogItemModal({
       ? await supabase.from(table).update(row).eq('id', item.id).select('id').single()
       : await supabase.from(table).insert(row).select('id').single()
     setBusy(false)
-    if (res.error) return setErr(errorMessage(res.error))
+    if (res.error) return setErr(errorMessage(res.error, t))
     await qc.invalidateQueries({ queryKey: isFruit ? keys.fruits : keys.varieties })
     qc.invalidateQueries({ queryKey: keys.stock })
-    toast(`${name.trim()} saved`)
+    toast(t('common.saved', { name: name.trim() }))
     onSaved(res.data.id)
     onClose()
   }
 
   async function remove() {
-    if (!item || !confirm(`Delete ${item.name}? This cannot be undone.`)) return
+    if (!item || !confirm(t('common.confirmDelete', { name: displayName(item) }))) return
     setBusy(true)
     const { error } = await supabase.from(table).delete().eq('id', item.id)
     setBusy(false)
-    if (error) return setErr(errorMessage(error))
+    if (error) return setErr(errorMessage(error, t))
     await qc.invalidateQueries({ queryKey: isFruit ? keys.fruits : keys.varieties })
-    toast(`${item.name} deleted`)
+    toast(t('common.deleted', { name: displayName(item) }))
     onClose()
   }
 
@@ -224,25 +230,29 @@ function CatalogItemModal({
     <Modal
       open
       onClose={onClose}
-      title={item ? `Edit ${label}` : `Add ${label}`}
+      title={
+        item
+          ? t(isFruit ? 'catalog.editFruitTitle' : 'catalog.editVarietyTitle')
+          : t(isFruit ? 'catalog.addFruitTitle' : 'catalog.addVarietyTitle')
+      }
       footer={
         <>
           {item && (
             <Button variant="danger" onClick={remove} disabled={busy} className="mr-auto">
-              <Trash2 className="size-4" /> Delete
+              <Trash2 className="size-4" /> {t('common.delete')}
             </Button>
           )}
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button onClick={save} loading={busy} disabled={uploading}>
-            Save
+            {t('common.save')}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
-        <Field label="Name">
+        <Field label={t('common.nameEn')}>
           <input
             className="input"
             autoFocus
@@ -251,9 +261,17 @@ function CatalogItemModal({
             placeholder={isFruit ? 'e.g. Apple' : 'e.g. Kashmir Apple'}
           />
         </Field>
+        <Field label={t('common.nameTa')}>
+          <input
+            className="input"
+            value={nameTa}
+            onChange={(e) => setNameTa(e.target.value)}
+            placeholder={isFruit ? 'எ.கா. ஆப்பிள்' : 'எ.கா. காஷ்மீர் ஆப்பிள்'}
+          />
+        </Field>
 
         <div>
-          <span className="label">Picture</span>
+          <span className="label">{t('catalog.picture')}</span>
           <div className="flex items-center gap-4">
             <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-card border border-border bg-surface-low text-5xl">
               {preview ? (
@@ -276,11 +294,11 @@ function CatalogItemModal({
                 loading={uploading}
                 onClick={() => fileRef.current?.click()}
               >
-                <ImagePlus className="size-4" /> {preview ? 'Change photo' : 'Upload photo'}
+                <ImagePlus className="size-4" /> {preview ? t('catalog.changePhoto') : t('catalog.uploadPhoto')}
               </Button>
               {preview && (
                 <Button variant="ghost" size="sm" onClick={() => setImagePath(null)}>
-                  Use emoji instead
+                  {t('catalog.useEmoji')}
                 </Button>
               )}
             </div>
@@ -288,7 +306,9 @@ function CatalogItemModal({
         </div>
 
         <div>
-          <span className="label">Emoji {!isFruit && '(optional, defaults to the fruit emoji)'}</span>
+          <span className="label">
+            {isFruit ? t('catalog.emoji') : t('catalog.emojiOptional')}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {FRUIT_EMOJIS.map((e) => (
               <button
@@ -304,7 +324,7 @@ function CatalogItemModal({
               className="input h-10 w-20 text-center text-lg"
               value={emoji ?? ''}
               onChange={(e) => setEmoji(e.target.value)}
-              placeholder="Other"
+              placeholder={t('catalog.other')}
               maxLength={4}
             />
           </div>
@@ -312,7 +332,7 @@ function CatalogItemModal({
 
         <div className="flex flex-wrap items-end gap-4">
           {isFruit && (
-            <Field label="Display order">
+            <Field label={t('catalog.displayOrder')}>
               <input
                 className="input w-28"
                 type="number"
@@ -328,8 +348,8 @@ function CatalogItemModal({
               checked={active}
               onChange={(e) => setActive(e.target.checked)}
             />
-            <span className="font-medium">Active</span>
-            <span className="text-muted">(inactive items are hidden from new orders)</span>
+            <span className="font-medium">{t('common.active')}</span>
+            <span className="text-muted">{t('catalog.activeHint')}</span>
           </label>
         </div>
 

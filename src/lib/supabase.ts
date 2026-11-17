@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import type { TranslateFn } from '../i18n/types'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string
 const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string
@@ -29,14 +30,21 @@ export async function uploadImage(file: File, folder: 'fruits' | 'varieties'): P
   return path
 }
 
-export function errorMessage(err: unknown): string {
-  if (!err) return 'Something went wrong'
+const enFallback = {
+  'common.somethingWrong': 'Something went wrong',
+  'common.inUse': 'This item is in use by other records. Mark it inactive instead.',
+  'common.duplicateName': 'An item with this name already exists.',
+} as const
+
+export function errorMessage(err: unknown, t?: TranslateFn): string {
+  const tr = (key: keyof typeof enFallback) => (t ? t(key) : enFallback[key])
+  if (!err) return tr('common.somethingWrong')
   if (typeof err === 'string') return err
   if (typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
     const code = 'code' in err ? err.code : undefined
-    if (code === '23503') return 'This item is in use by other records. Mark it inactive instead.'
-    if (code === '23505') return 'An item with this name already exists.'
+    if (code === '23503') return tr('common.inUse')
+    if (code === '23505') return tr('common.duplicateName')
     return err.message
   }
-  return 'Something went wrong'
+  return tr('common.somethingWrong')
 }
