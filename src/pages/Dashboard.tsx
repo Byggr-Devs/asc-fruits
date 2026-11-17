@@ -121,6 +121,8 @@ export function Dashboard() {
                   </div>
                   {m.type === 'receipt' ? (
                     <Chip tone="green">{t('movement.received')}</Chip>
+                  ) : m.type === 'transfer' ? (
+                    <Chip tone="neutral">{t('movement.transfer')}</Chip>
                   ) : (
                     <Chip tone={m.reason === 'wastage' ? 'red' : 'amber'}>
                       {m.reason ? t(`reason.${m.reason}`) : t('reason.adjustment')}

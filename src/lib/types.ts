@@ -33,6 +33,18 @@ export type Vendor = {
 
 export type VendorVariety = { vendor_id: string; variety_id: string }
 
+export type Location = {
+  id: string
+  slug: string | null
+  name: string
+  name_ta: string | null
+  active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export const GODOWN_LOCATION_ID = 'a0000000-0000-4000-8000-000000000001'
+
 export type OrderStatus = 'pending' | 'fulfilled' | 'cancelled'
 
 export type OrderItem = {
@@ -76,13 +88,23 @@ export type Delivery = {
   created_at: string
 }
 
+export type DeliveryItemAllocation = {
+  location_id: string
+  qty_kg: number
+  location?: Pick<Location, 'id' | 'name' | 'name_ta'> | null
+}
+
 export type DeliveryListRow = Delivery & {
   vendor: Pick<Vendor, 'id' | 'name' | 'name_ta'> | null
-  delivery_items: { variety_id: string; qty_kg: number }[]
+  delivery_items: {
+    variety_id: string
+    qty_kg: number
+    delivery_item_allocations?: DeliveryItemAllocation[]
+  }[]
   orders: { id: string; order_no: number }[]
 }
 
-export type MovementType = 'receipt' | 'adjustment'
+export type MovementType = 'receipt' | 'adjustment' | 'transfer'
 export type AdjustmentReason = 'wastage' | 'correction' | 'other'
 
 export type StockMovement = {
@@ -92,9 +114,12 @@ export type StockMovement = {
   type: MovementType
   reason: AdjustmentReason | null
   delivery_id: string | null
+  location_id: string
+  transfer_group_id: string | null
   note: string | null
   created_at: string
   delivery: { delivery_no: number } | null
+  location?: Pick<Location, 'id' | 'name' | 'name_ta'> | null
 }
 
 export type CurrentStock = {
@@ -108,6 +133,11 @@ export type CurrentStock = {
   fruit_name_ta: string | null
   fruit_emoji: string
   fruit_image_path: string | null
+  location_id: string
+  location_name: string
+  location_name_ta: string | null
+  location_slug: string | null
+  location_sort_order: number
   qty_kg: number
   last_movement_at: string | null
 }
@@ -119,8 +149,12 @@ export type DailyReportRow = {
   fruit_name: string
   fruit_name_ta: string | null
   fruit_emoji: string
+  location_id: string
+  location_name: string
+  location_name_ta: string | null
   opening_kg: number
   received_kg: number
   adjusted_kg: number
+  transferred_kg: number
   closing_kg: number
 }

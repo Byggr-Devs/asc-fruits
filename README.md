@@ -19,11 +19,15 @@ supabase link --project-ref <ref>
 supabase db push --remote
 ```
 
-Migration `20261117180000_name_ta.sql` (optional Tamil names for fruits, varieties and vendors) must be pushed with `supabase db push --remote` before the bilingual UI works against the database.
+Push pending migrations with `supabase db push --remote` (includes Tamil `name_ta` columns and multi-location stock).
 
 ## Language
 
 The UI is bilingual (English / Tamil). Use the language toggle in the app; the choice is remembered in the browser. Fruits, varieties and vendors have an English name plus an optional Tamil name (`name_ta`), edited in the Fruits & Varieties and Vendors screens. When no Tamil name is set, the English name is shown. Generated order PDFs stay English for now.
+
+## Locations
+
+Stock is tracked per location (seeded: Godown, Shop 1, Shop 2). Manage locations under Masters. When receiving a delivery, split kg across locations. Transfer stock between locations from Stock → Transfer. Existing movements were assigned to Godown.
 
 ## Users
 

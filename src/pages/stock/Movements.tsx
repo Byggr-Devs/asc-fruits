@@ -11,7 +11,7 @@ import {
   formatNumber,
   todayISO,
 } from '../../lib/format'
-import { useCatalog, useMovements, type CatalogVariety } from '../../lib/queries'
+import { useActiveLocations, useCatalog, useMovements, type CatalogVariety } from '../../lib/queries'
 import type { StockMovement } from '../../lib/types'
 
 type Row = StockMovement & {
@@ -19,6 +19,7 @@ type Row = StockMovement & {
   varietyName: string
   fruitName: string
   refLabel: string
+  locationName: string
 }
 
 const h = columnHelper<Row>()
@@ -27,12 +28,15 @@ export function Movements() {
   const { t, displayName } = useLanguage()
   const [from, setFrom] = useState(addDays(todayISO(), -6))
   const [to, setTo] = useState(todayISO())
-  const [type, setType] = useState<'all' | 'receipt' | 'adjustment'>('all')
+  const [type, setType] = useState<'all' | 'receipt' | 'adjustment' | 'transfer'>('all')
+  const [locationId, setLocationId] = useState<string>('all')
+  const locations = useActiveLocations()
   const { varietyById } = useCatalog()
   const movements = useMovements({
     from: from ? dayStartISO(from) : undefined,
     to: to ? dayStartISO(addDays(to, 1)) : undefined,
     type,
+    locationId,
   })
 
   const rows = useMemo<Row[]>(
@@ -45,6 +49,7 @@ export function Movements() {
           varietyName: displayName(variety, t('common.unknown')),
           fruitName: displayName(variety?.fruit),
           refLabel: m.delivery ? deliveryNo(m.delivery.delivery_no) : '',
+          locationName: displayName(m.location, '-'),
         }
       }),
     [movements.data, varietyById, displayName, t],
@@ -82,11 +87,17 @@ export function Movements() {
           cell: (c) =>
             c.getValue() === 'receipt' ? (
               <Chip tone="green">{t('movement.received')}</Chip>
+            ) : c.getValue() === 'transfer' ? (
+              <Chip tone="neutral">{t('movement.transfer')}</Chip>
             ) : (
               <Chip tone={c.row.original.reason === 'wastage' ? 'red' : 'amber'}>
                 {c.row.original.reason ? t(`reason.${c.row.original.reason}`) : t('reason.adjustment')}
               </Chip>
             ),
+        }),
+        h.accessor('locationName', {
+          header: t('movements.colLocation'),
+          cell: (c) => <span className="whitespace-nowrap">{c.getValue()}</span>,
         }),
         h.accessor('refLabel', {
           header: t('movements.colRef'),
@@ -154,13 +165,27 @@ export function Movements() {
               <option value="all">{t('movement.allTypes')}</option>
               <option value="receipt">{t('movement.received')}</option>
               <option value="adjustment">{t('movement.adjustments')}</option>
+              <option value="transfer">{t('movement.transfers')}</option>
+            </select>
+            <select
+              className="input w-auto"
+              value={locationId}
+              onChange={(e) => setLocationId(e.target.value)}
+              aria-label={t('stock.location')}
+            >
+              <option value="all">{t('stock.allLocations')}</option>
+              {locations.data.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {displayName(l)}
+                </option>
+              ))}
             </select>
           </div>
         }
         footer={
           rows.length > 0 ? (
             <tr className="font-semibold">
-              <td className="px-3 py-3" colSpan={4}>
+              <td className="px-3 py-3" colSpan={5}>
                 {t('movements.in')}{' '}
                 <span className="num text-primary">+{formatNumber(inKg)}</span> · {t('movements.out')}{' '}
                 <span className="num text-danger">{formatNumber(outKg)}</span>

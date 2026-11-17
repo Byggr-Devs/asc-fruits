@@ -132,6 +132,18 @@ export function DeliveriesList() {
                   <div className="flex-1">
                     <div className="font-semibold">{displayName(v, t('common.unknown'))}</div>
                     <div className="text-2xs text-muted">{displayName(v?.fruit)}</div>
+                    {(i.delivery_item_allocations ?? []).length > 0 && (
+                      <ul className="mt-1 space-y-0.5 text-2xs text-muted">
+                        {(i.delivery_item_allocations ?? []).map((a) => (
+                          <li key={a.location_id} className="flex gap-1.5">
+                            <span>{displayName(a.location, '-')}</span>
+                            <span className="num font-semibold text-ink">
+                              {formatNumber(a.qty_kg)} {t('common.kg')}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   <div className="num font-semibold">
                     {formatNumber(i.qty_kg)} {t('common.kg')}

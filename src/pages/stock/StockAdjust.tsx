@@ -7,9 +7,15 @@ import { Button, PageHeader, Section, Spinner, Thumb } from '../../components/ui
 import { VarietyPicker } from '../../components/VarietyPicker'
 import { useLanguage } from '../../i18n/LanguageProvider'
 import { formatKg, parseQty, round3 } from '../../lib/format'
-import { keys, useCatalog, useCurrentStock, type CatalogVariety } from '../../lib/queries'
+import {
+  keys,
+  useActiveLocations,
+  useCatalog,
+  useCurrentStock,
+  type CatalogVariety,
+} from '../../lib/queries'
 import { errorMessage, supabase } from '../../lib/supabase'
-import type { AdjustmentReason } from '../../lib/types'
+import { GODOWN_LOCATION_ID, type AdjustmentReason } from '../../lib/types'
 
 const reasons: { id: AdjustmentReason; labelKey: string; hintKey: string }[] = [
   { id: 'wastage', labelKey: 'reason.wastage', hintKey: 'reason.wastageHint' },
@@ -21,11 +27,13 @@ export function StockAdjust() {
   const { t, displayName } = useLanguage()
   const catalog = useCatalog()
   const stock = useCurrentStock()
+  const locations = useActiveLocations()
   const qc = useQueryClient()
   const toast = useToast()
   const navigate = useNavigate()
 
   const [variety, setVariety] = useState<CatalogVariety | null>(null)
+  const [locationId, setLocationId] = useState(GODOWN_LOCATION_ID)
   const [direction, setDirection] = useState<'remove' | 'add'>('remove')
   const [qty, setQty] = useState('')
   const [reason, setReason] = useState<AdjustmentReason>('wastage')
@@ -33,11 +41,12 @@ export function StockAdjust() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const stockById = useMemo(
-    () => new Map((stock.data ?? []).map((s) => [s.variety_id, Number(s.qty_kg)])),
+  const stockByKey = useMemo(
+    () =>
+      new Map((stock.data ?? []).map((s) => [`${s.variety_id}:${s.location_id}`, Number(s.qty_kg)])),
     [stock.data],
   )
-  const current = variety ? (stockById.get(variety.id) ?? 0) : 0
+  const current = variety ? (stockByKey.get(`${variety.id}:${locationId}`) ?? 0) : 0
   const amount = parseQty(qty)
   const signed = direction === 'remove' ? -amount : amount
   const after = round3(current + signed)
@@ -45,11 +54,13 @@ export function StockAdjust() {
   async function save() {
     setErr(null)
     if (!variety) return setErr(t('stock.chooseVariety'))
+    if (!locationId) return setErr(t('stock.chooseLocation'))
     if (amount <= 0) return setErr(t('stock.enterKg'))
     if (reason === 'other' && !note.trim()) return setErr(t('stock.noteRequired'))
     setBusy(true)
     const { error } = await supabase.from('stock_movements').insert({
       variety_id: variety.id,
+      location_id: locationId,
       qty_kg: signed,
       type: 'adjustment',
       reason,
@@ -67,7 +78,7 @@ export function StockAdjust() {
     navigate('/stock')
   }
 
-  if (catalog.isLoading) return <Spinner />
+  if (catalog.isLoading || locations.isLoading) return <Spinner />
 
   return (
     <div>
@@ -122,6 +133,21 @@ export function StockAdjust() {
                   label={t('stock.addStock')}
                 />
               </div>
+
+              <label className="block">
+                <span className="label">{t('stock.location')}</span>
+                <select
+                  className="input"
+                  value={locationId}
+                  onChange={(e) => setLocationId(e.target.value)}
+                >
+                  {locations.data.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {displayName(l)}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <label className="block">
                 <span className="label">{t('stock.quantity')}</span>

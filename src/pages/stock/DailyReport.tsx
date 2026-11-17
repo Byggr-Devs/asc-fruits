@@ -5,7 +5,7 @@ import { columnHelper } from '../../lib/table'
 import { useLanguage } from '../../i18n/LanguageProvider'
 import { Button, ErrorBox, PageHeader, Spinner, StatCard } from '../../components/ui'
 import { addDays, formatDate, formatKg, formatNumber, todayISO } from '../../lib/format'
-import { useDailyReport } from '../../lib/queries'
+import { useActiveLocations, useDailyReport } from '../../lib/queries'
 import type { DailyReportRow } from '../../lib/types'
 import { ArrowDownToLine, Scale, Trash2 } from 'lucide-react'
 
@@ -23,7 +23,9 @@ const num = (n: number, signed = false) => {
 export function DailyReport() {
   const { t, displayName } = useLanguage()
   const [day, setDay] = useState(todayISO())
-  const report = useDailyReport(day)
+  const [locationId, setLocationId] = useState<string | null>(null)
+  const locations = useActiveLocations()
+  const report = useDailyReport(day, locationId)
   const rows = useMemo(() => report.data ?? [], [report.data])
 
   const columns = useMemo(
@@ -48,6 +50,21 @@ export function DailyReport() {
             </div>
           ),
         }),
+        ...(locationId === null
+          ? [
+              h.accessor('location_name', {
+                header: t('report.colLocation'),
+                cell: (c) => (
+                  <span className="whitespace-nowrap">
+                    {displayName({
+                      name: c.getValue(),
+                      name_ta: c.row.original.location_name_ta,
+                    })}
+                  </span>
+                ),
+              }),
+            ]
+          : []),
         h.accessor('opening_kg', {
           header: t('report.colOpening'),
           meta: { align: 'right' },
@@ -63,6 +80,11 @@ export function DailyReport() {
           meta: { align: 'right' },
           cell: (c) => num(c.getValue(), true),
         }),
+        h.accessor('transferred_kg', {
+          header: t('report.colTransferred'),
+          meta: { align: 'right' },
+          cell: (c) => num(c.getValue(), true),
+        }),
         h.accessor('closing_kg', {
           header: t('report.colClosing'),
           meta: { align: 'right' },
@@ -71,7 +93,7 @@ export function DailyReport() {
           ),
         }),
       ]),
-    [t, displayName],
+    [t, displayName, locationId],
   )
 
   const totals = useMemo(
@@ -81,9 +103,10 @@ export function DailyReport() {
           opening: t.opening + Number(r.opening_kg),
           received: t.received + Number(r.received_kg),
           adjusted: t.adjusted + Number(r.adjusted_kg),
+          transferred: t.transferred + Number(r.transferred_kg),
           closing: t.closing + Number(r.closing_kg),
         }),
-        { opening: 0, received: 0, adjusted: 0, closing: 0 },
+        { opening: 0, received: 0, adjusted: 0, transferred: 0, closing: 0 },
       ),
     [rows],
   )
@@ -130,6 +153,19 @@ export function DailyReport() {
             {t('common.today')}
           </Button>
         )}
+        <select
+          className="input ml-auto w-auto"
+          value={locationId ?? ''}
+          onChange={(e) => setLocationId(e.target.value || null)}
+          aria-label={t('stock.location')}
+        >
+          <option value="">{t('stock.allLocations')}</option>
+          {locations.data.map((l) => (
+            <option key={l.id} value={l.id}>
+              {displayName(l)}
+            </option>
+          ))}
+        </select>
       </div>
 
       <ErrorBox error={report.error} />
@@ -152,8 +188,11 @@ export function DailyReport() {
           </div>
           <ul className="list-disc pl-5">
             {alerts.map((a) => (
-              <li key={a.variety_id}>
-                {displayName({ name: a.variety_name, name_ta: a.variety_name_ta })}:{' '}
+              <li key={`${a.variety_id}:${a.location_id}`}>
+                {displayName({ name: a.variety_name, name_ta: a.variety_name_ta })}
+                {locationId === null &&
+                  ` (${displayName({ name: a.location_name, name_ta: a.location_name_ta })})`}
+                :{' '}
                 {Number(a.closing_kg) < 0
                   ? t('report.negativeClosing', { kg: formatKg(a.closing_kg) })
                   : t('report.adjustedAlert', { kg: formatKg(a.adjusted_kg) })}
@@ -174,9 +213,11 @@ export function DailyReport() {
             rows.length > 0 ? (
               <tr className="font-semibold">
                 <td className="px-3 py-3">{t('common.total')}</td>
+                {locationId === null && <td />}
                 <td className="num px-3 py-3 text-right">{formatNumber(totals.opening)}</td>
                 <td className="num px-3 py-3 text-right">{formatNumber(totals.received)}</td>
                 <td className="num px-3 py-3 text-right">{formatNumber(totals.adjusted)}</td>
+                <td className="num px-3 py-3 text-right">{formatNumber(totals.transferred)}</td>
                 <td className="num px-3 py-3 text-right">{formatNumber(totals.closing)}</td>
               </tr>
             ) : undefined

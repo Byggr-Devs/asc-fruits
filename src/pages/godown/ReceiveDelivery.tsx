@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useTable } from '@tanstack/react-table'
 import { ArrowLeft, Check, CopyCheck, Plus, X } from 'lucide-react'
-import { createContext, useContext, useMemo, useState } from 'react'
+import { createContext, Fragment, useContext, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { appTableFeatures, columnHelper } from '../../lib/table'
 import { useToast } from '../../components/toast'
@@ -12,6 +12,7 @@ import { useLanguage } from '../../i18n/LanguageProvider'
 import { formatDate, formatNumber, orderNo, parseQty, round3 } from '../../lib/format'
 import {
   keys,
+  useActiveLocations,
   useCatalog,
   useOrders,
   usePendingOrdersForVendor,
@@ -19,9 +20,12 @@ import {
   type CatalogVariety,
 } from '../../lib/queries'
 import { errorMessage, supabase } from '../../lib/supabase'
-import type { OrderDetail, OrderItem } from '../../lib/types'
+import { GODOWN_LOCATION_ID, type Location, type OrderDetail, type OrderItem } from '../../lib/types'
 
 type MatrixRow = { varietyId: string; variety: CatalogVariety | undefined }
+
+/** One destination line for a received variety. With a single line, its qty tracks the total received. */
+type AllocLine = { location_id: string; qty: string }
 
 type MatrixState = {
   excluded: Set<string>
@@ -45,6 +49,7 @@ export function ReceiveDelivery() {
   const pendingAll = useOrders('pending')
   const pending = usePendingOrdersForVendor(vendorId)
   const catalog = useCatalog()
+  const locations = useActiveLocations()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const toast = useToast()
@@ -53,6 +58,7 @@ export function ReceiveDelivery() {
   const [orderQty, setOrderQty] = useState<Record<string, string>>({})
   const [received, setReceived] = useState<Record<string, string>>({})
   const [extras, setExtras] = useState<string[]>([])
+  const [splits, setSplits] = useState<Record<string, AllocLine[]>>({})
   const [notes, setNotes] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -111,6 +117,7 @@ export function ReceiveDelivery() {
     setExcluded(new Set())
     setOrderQty({})
     setReceived({})
+    setSplits({})
     setExtras([])
     setNotes('')
     setErr(null)
@@ -134,9 +141,81 @@ export function ReceiveDelivery() {
     setTimeout(() => document.getElementById(`recv-${v.id}`)?.focus(), 50)
   }
 
+  const defaultLine = (): AllocLine => ({ location_id: GODOWN_LOCATION_ID, qty: '' })
+  const linesFor = (varietyId: string): AllocLine[] => splits[varietyId] ?? [defaultLine()]
+
+  function updateLine(varietyId: string, idx: number, patch: Partial<AllocLine>) {
+    setSplits((s) => {
+      const lines = [...(s[varietyId] ?? [defaultLine()])]
+      lines[idx] = { ...lines[idx], ...patch }
+      return { ...s, [varietyId]: lines }
+    })
+  }
+
+  function addLine(varietyId: string) {
+    setSplits((s) => {
+      const lines = [...(s[varietyId] ?? [defaultLine()])]
+      // Going from one line to two: the first line keeps the whole amount until the user edits it
+      if (lines.length === 1) lines[0] = { ...lines[0], qty: received[varietyId] ?? '' }
+      const used = new Set(lines.map((l) => l.location_id))
+      const next = locations.data.find((l) => !used.has(l.id))
+      lines.push({ location_id: next?.id ?? GODOWN_LOCATION_ID, qty: '' })
+      return { ...s, [varietyId]: lines }
+    })
+  }
+
+  function removeLine(varietyId: string, idx: number) {
+    setSplits((s) => {
+      const lines = (s[varietyId] ?? []).filter((_, i) => i !== idx)
+      const next = { ...s }
+      if (lines.length <= 1 && lines[0]?.location_id === GODOWN_LOCATION_ID) delete next[varietyId]
+      else next[varietyId] = lines
+      return next
+    })
+  }
+
+  /** Final per-location allocations for a variety (merged by location, zero lines dropped). */
+  function allocationsFor(varietyId: string): { location_id: string; qty_kg: number }[] {
+    const total = parseQty(received[varietyId] ?? '')
+    if (total <= 0) return []
+    const lines = linesFor(varietyId)
+    if (lines.length === 1) return [{ location_id: lines[0].location_id, qty_kg: total }]
+    const merged = new Map<string, number>()
+    for (const l of lines) {
+      const q = parseQty(l.qty)
+      if (q > 0) merged.set(l.location_id, round3((merged.get(l.location_id) ?? 0) + q))
+    }
+    return [...merged].map(([location_id, qty_kg]) => ({ location_id, qty_kg }))
+  }
+
+  const allocSum = (varietyId: string) =>
+    round3(allocationsFor(varietyId).reduce((s, a) => s + a.qty_kg, 0))
+
+  const locationTotals = (() => {
+    const m = new Map<string, number>()
+    for (const r of rows)
+      for (const a of allocationsFor(r.varietyId))
+        m.set(a.location_id, round3((m.get(a.location_id) ?? 0) + a.qty_kg))
+    return [...m]
+  })()
+
   function review() {
     setErr(null)
     if (totalReceived <= 0) return setErr(t('godown.enterWeight'))
+    for (const r of rows) {
+      const total = round3(parseQty(received[r.varietyId] ?? ''))
+      if (total <= 0) continue
+      const sum = allocSum(r.varietyId)
+      if (sum !== total) {
+        return setErr(
+          t('godown.splitMustMatch', {
+            name: displayName(r.variety, t('common.unknown')),
+            total: formatNumber(total),
+            sum: formatNumber(sum),
+          }),
+        )
+      }
+    }
     setConfirmOpen(true)
   }
 
@@ -147,7 +226,11 @@ export function ReceiveDelivery() {
       vendor_id: vendor.id,
       notes: notes.trim() || null,
       items: rows
-        .map((r) => ({ variety_id: r.varietyId, qty_kg: parseQty(received[r.varietyId] ?? '') }))
+        .map((r) => ({
+          variety_id: r.varietyId,
+          qty_kg: parseQty(received[r.varietyId] ?? ''),
+          allocations: allocationsFor(r.varietyId),
+        }))
         .filter((i) => i.qty_kg > 0),
       orders: includedOrders.map((o) => ({
         order_id: o.id,
@@ -172,7 +255,7 @@ export function ReceiveDelivery() {
     navigate('/godown')
   }
 
-  if (vendors.isLoading || catalog.isLoading) return <Spinner />
+  if (vendors.isLoading || catalog.isLoading || locations.isLoading) return <Spinner />
 
   if (!vendor) {
     return (
@@ -239,7 +322,8 @@ export function ReceiveDelivery() {
                   </thead>
                   <tbody>
                     {rows.map((r) => (
-                      <tr key={r.varietyId} className={`border-t border-border ${ROW_H}`}>
+                      <Fragment key={r.varietyId}>
+                      <tr className={`border-t border-border ${ROW_H}`}>
                         <td className="px-3">
                           <VarietyLabel variety={r.variety}>
                             {!fromOrders.has(r.varietyId) && (
@@ -247,6 +331,11 @@ export function ReceiveDelivery() {
                                 onClick={() => {
                                   setExtras((e) => e.filter((x) => x !== r.varietyId))
                                   setReceived((prev) => {
+                                    const next = { ...prev }
+                                    delete next[r.varietyId]
+                                    return next
+                                  })
+                                  setSplits((prev) => {
                                     const next = { ...prev }
                                     delete next[r.varietyId]
                                     return next
@@ -283,6 +372,21 @@ export function ReceiveDelivery() {
                           />
                         </td>
                       </tr>
+                      {parseQty(received[r.varietyId] ?? '') > 0 && (
+                        <tr>
+                          <td colSpan={3} className="px-3 pb-3">
+                            <AllocationEditor
+                              lines={linesFor(r.varietyId)}
+                              locations={locations.data}
+                              total={parseQty(received[r.varietyId] ?? '')}
+                              onChange={(idx, patch) => updateLine(r.varietyId, idx, patch)}
+                              onAdd={() => addLine(r.varietyId)}
+                              onRemove={(idx) => removeLine(r.varietyId, idx)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </table>
@@ -369,6 +473,21 @@ export function ReceiveDelivery() {
                 name: displayName(vendor),
               })}
             </p>
+            {locationTotals.length > 0 && (
+              <div>
+                <div className="label">{t('godown.colLocation')}</div>
+                <ul className="divide-y divide-border rounded-card border border-border">
+                  {locationTotals.map(([id, kg]) => (
+                    <li key={id} className="flex justify-between px-3 py-2">
+                      <span>{displayName(locations.data.find((l) => l.id === id), '-')}</span>
+                      <span className="num font-semibold">
+                        {formatNumber(kg)} {t('common.kg')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {includedOrders.length > 0 && (
               <div>
                 <div className="label">{t('godown.markedFulfilled')}</div>
@@ -575,4 +694,86 @@ function OrderCell({ orderId, varietyId }: { orderId: string; varietyId: string 
 function ExpectedCell({ varietyId }: { varietyId: string }) {
   const { expectedFor } = useMatrix()
   return <div className="num text-right font-semibold">{formatNumber(expectedFor(varietyId))}</div>
+}
+
+function AllocationEditor({
+  lines,
+  locations,
+  total,
+  onChange,
+  onAdd,
+  onRemove,
+}: {
+  lines: AllocLine[]
+  locations: Location[]
+  total: number
+  onChange: (idx: number, patch: Partial<AllocLine>) => void
+  onAdd: () => void
+  onRemove: (idx: number) => void
+}) {
+  const { t, displayName } = useLanguage()
+  const multi = lines.length > 1
+  const sum = round3(lines.reduce((s, l) => s + parseQty(l.qty), 0))
+  const mismatch = multi && sum !== round3(total)
+  return (
+    <div className="rounded-card bg-surface-low px-3 py-2.5">
+      <div className="mb-1.5 text-3xs font-semibold tracking-wider text-muted uppercase">
+        {t('godown.splitTo')}
+      </div>
+      <div className="space-y-2">
+        {lines.map((line, idx) => (
+          <div key={idx} className="flex items-center gap-2">
+            <select
+              className="input h-10 min-w-0 flex-1"
+              value={line.location_id}
+              onChange={(e) => onChange(idx, { location_id: e.target.value })}
+              aria-label={t('godown.colLocation')}
+            >
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {displayName(l)}
+                </option>
+              ))}
+            </select>
+            {multi && (
+              <>
+                <input
+                  className="input num h-10 w-[100px] text-right"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  placeholder="0"
+                  value={line.qty}
+                  onChange={(e) => onChange(idx, { qty: e.target.value })}
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemove(idx)}
+                  className="cursor-pointer text-muted hover:text-danger"
+                  aria-label={t('godown.remove')}
+                >
+                  <X className="size-4" />
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        {locations.length > lines.length ? (
+          <Button variant="secondary" size="sm" onClick={onAdd}>
+            <Plus className="size-3.5" /> {t('godown.addLocationSplit')}
+          </Button>
+        ) : (
+          <span />
+        )}
+        {mismatch && (
+          <span className="num text-2xs font-semibold text-warning">
+            {formatNumber(sum)} / {formatNumber(total)} {t('common.kg')}
+          </span>
+        )}
+      </div>
+    </div>
+  )
 }

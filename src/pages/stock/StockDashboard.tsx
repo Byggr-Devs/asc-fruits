@@ -1,15 +1,28 @@
-import { AlertTriangle, ChevronDown, FileText, History, Layers, Scale, SlidersHorizontal } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeftRight,
+  ChevronDown,
+  FileText,
+  History,
+  Layers,
+  Scale,
+  SlidersHorizontal,
+} from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { DataTable } from '../../components/DataTable'
 import { columnHelper } from '../../lib/table'
 import { ErrorBox, PageHeader, Spinner, StatCard, Thumb } from '../../components/ui'
 import { useLanguage } from '../../i18n/LanguageProvider'
 import { formatDateTime, formatKg, formatNumber } from '../../lib/format'
-import { useCurrentStock } from '../../lib/queries'
+import { useActiveLocations, useCurrentStock } from '../../lib/queries'
 import type { CurrentStock } from '../../lib/types'
 
-type Row = CurrentStock & { varietyLabel: string; fruitLabel: string }
+type Row = CurrentStock & {
+  varietyLabel: string
+  fruitLabel: string
+  breakdown: { name: string; name_ta: string | null; qty: number }[]
+}
 
 const h = columnHelper<Row>()
 
@@ -19,15 +32,58 @@ const linkBtn =
 export function StockDashboard() {
   const { t, displayName } = useLanguage()
   const stock = useCurrentStock()
+  const locations = useActiveLocations()
+  const [params, setParams] = useSearchParams()
   const [openFruit, setOpenFruit] = useState<string | null>(null)
 
+  const activeIds = useMemo(() => new Set(locations.data.map((l) => l.id)), [locations.data])
+  const paramLocation = params.get('location')
+  // 'all' unless the query param names a currently active location
+  const locationId = paramLocation && activeIds.has(paramLocation) ? paramLocation : 'all'
+
+  function selectLocation(id: string) {
+    setParams(id === 'all' ? {} : { location: id }, { replace: true })
+  }
+
+  // Per-location rows within the filter (only active locations; one location when filtered)
+  const scoped = useMemo(
+    () =>
+      (stock.data ?? []).filter((r) =>
+        locationId === 'all' ? activeIds.has(r.location_id) : r.location_id === locationId,
+      ),
+    [stock.data, locationId, activeIds],
+  )
+
+  // One row per variety. When viewing All, qty is summed across locations.
+  const varietyRows = useMemo<Row[]>(() => {
+    const byVariety = new Map<string, Row>()
+    for (const r of scoped) {
+      const existing = byVariety.get(r.variety_id)
+      const breakdown = { name: r.location_name, name_ta: r.location_name_ta, qty: Number(r.qty_kg) }
+      if (!existing) {
+        byVariety.set(r.variety_id, {
+          ...r,
+          qty_kg: Number(r.qty_kg),
+          varietyLabel: displayName({ name: r.variety_name, name_ta: r.variety_name_ta }),
+          fruitLabel: displayName({ name: r.fruit_name, name_ta: r.fruit_name_ta }),
+          breakdown: Number(r.qty_kg) !== 0 ? [breakdown] : [],
+        })
+        continue
+      }
+      existing.qty_kg = Number(existing.qty_kg) + Number(r.qty_kg)
+      if (r.last_movement_at && (!existing.last_movement_at || r.last_movement_at > existing.last_movement_at))
+        existing.last_movement_at = r.last_movement_at
+      if (Number(r.qty_kg) !== 0) existing.breakdown.push(breakdown)
+    }
+    return [...byVariety.values()]
+  }, [scoped, displayName])
+
   const { fruits, totalKg, inStock, negatives } = useMemo(() => {
-    const data = stock.data ?? []
     const byFruit = new Map<
       string,
-      { id: string; name: string; emoji: string; image: string | null; kg: number; items: CurrentStock[] }
+      { id: string; name: string; emoji: string; image: string | null; kg: number; items: Row[] }
     >()
-    for (const r of data) {
+    for (const r of varietyRows) {
       const f = byFruit.get(r.fruit_id) ?? {
         id: r.fruit_id,
         name: displayName({ name: r.fruit_name, name_ta: r.fruit_name_ta }),
@@ -42,22 +98,16 @@ export function StockDashboard() {
     }
     return {
       fruits: [...byFruit.values()].sort((a, b) => b.kg - a.kg),
-      totalKg: data.reduce((s, r) => s + Number(r.qty_kg), 0),
-      inStock: data.filter((r) => Number(r.qty_kg) > 0).length,
-      negatives: data.filter((r) => Number(r.qty_kg) < 0),
+      totalKg: varietyRows.reduce((s, r) => s + Number(r.qty_kg), 0),
+      inStock: varietyRows.filter((r) => Number(r.qty_kg) > 0).length,
+      // Negatives are checked per location so a shortfall in one place isn't hidden by another
+      negatives: scoped.filter((r) => Number(r.qty_kg) < 0),
     }
-  }, [stock.data, displayName])
+  }, [varietyRows, scoped, displayName])
 
-  const tableRows = useMemo<Row[]>(
-    () =>
-      (stock.data ?? [])
-        .filter((r) => r.last_movement_at)
-        .map((r) => ({
-          ...r,
-          varietyLabel: displayName({ name: r.variety_name, name_ta: r.variety_name_ta }),
-          fruitLabel: displayName({ name: r.fruit_name, name_ta: r.fruit_name_ta }),
-        })),
-    [stock.data, displayName],
+  const tableRows = useMemo(
+    () => varietyRows.filter((r) => r.last_movement_at),
+    [varietyRows],
   )
 
   const columns = useMemo(
@@ -77,6 +127,27 @@ export function StockDashboard() {
           ),
         }),
         h.accessor('fruitLabel', { header: t('stock.colFruit') }),
+        ...(locationId === 'all'
+          ? [
+              h.display({
+                id: 'locations',
+                header: t('stock.colLocation'),
+                enableSorting: false,
+                cell: (c) => (
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-2xs text-muted">
+                    {c.row.original.breakdown.map((b, i) => (
+                      <span key={i} className="whitespace-nowrap">
+                        {displayName({ name: b.name, name_ta: b.name_ta })}{' '}
+                        <span className={`num font-semibold ${b.qty < 0 ? 'text-danger' : 'text-ink'}`}>
+                          {formatNumber(b.qty)}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                ),
+              }),
+            ]
+          : []),
         h.accessor('last_movement_at', {
           header: t('stock.colLastMovement'),
           cell: (c) => <span className="text-muted">{formatDateTime(c.getValue())}</span>,
@@ -94,10 +165,10 @@ export function StockDashboard() {
           },
         }),
       ]),
-    [t],
+    [t, displayName, locationId],
   )
 
-  if (stock.isLoading) return <Spinner />
+  if (stock.isLoading || locations.isLoading) return <Spinner />
 
   return (
     <div>
@@ -112,6 +183,9 @@ export function StockDashboard() {
             >
               <SlidersHorizontal className="size-4" /> {t('stock.adjust')}
             </Link>
+            <Link to="/stock/transfer" className={linkBtn}>
+              <ArrowLeftRight className="size-4" /> {t('stock.transfer')}
+            </Link>
             <Link to="/stock/movements" className={linkBtn}>
               <History className="size-4" /> {t('stock.movements')}
             </Link>
@@ -121,7 +195,27 @@ export function StockDashboard() {
           </>
         }
       />
-      <ErrorBox error={stock.error} />
+      <ErrorBox error={stock.error ?? locations.error} />
+
+      <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label={t('stock.location')}>
+        {[{ id: 'all', label: t('stock.allLocations') }, ...locations.data.map((l) => ({ id: l.id, label: displayName(l) }))].map(
+          (tab) => {
+            const on = locationId === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => selectLocation(tab.id)}
+                className={`h-10 cursor-pointer rounded-full border px-4 text-xs font-semibold transition ${on ? 'border-primary bg-primary-soft text-primary-ink' : 'border-border text-muted hover:bg-surface-low'}`}
+              >
+                {tab.label}
+              </button>
+            )
+          },
+        )}
+      </div>
 
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <StatCard label={t('stock.totalStock')} value={formatKg(totalKg)} icon={<Scale className="size-6" />} />
@@ -143,7 +237,12 @@ export function StockDashboard() {
         <div className="mb-5 rounded-card border border-warning/30 bg-warning-soft px-4 py-3 text-sm text-warning">
           {t('stock.negative', {
             names: negatives
-              .map((n) => displayName({ name: n.variety_name, name_ta: n.variety_name_ta }))
+              .map((n) => {
+                const name = displayName({ name: n.variety_name, name_ta: n.variety_name_ta })
+                return locationId === 'all'
+                  ? `${name} (${displayName({ name: n.location_name, name_ta: n.location_name_ta })})`
+                  : name
+              })
               .join(', '),
           })}
         </div>

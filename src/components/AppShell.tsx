@@ -1,11 +1,13 @@
 import {
   Apple,
+  ArrowLeftRight,
   BarChart3,
   ClipboardList,
   FileText,
   History,
   Home,
   LogOut,
+  MapPin,
   Menu,
   MoreHorizontal,
   PanelLeftClose,
@@ -41,6 +43,7 @@ export function AppShell() {
           { to: '/orders', label: t('nav.orders'), icon: ClipboardList },
           { to: '/godown', label: t('nav.godown'), icon: Truck },
           { to: '/stock', label: t('nav.stock'), icon: Warehouse, end: true },
+          { to: '/stock/transfer', label: t('nav.transfer'), icon: ArrowLeftRight },
           { to: '/stock/movements', label: t('nav.movements'), icon: History },
           { to: '/stock/report', label: t('nav.dailyReport'), icon: FileText },
         ] as NavItem[],
@@ -50,6 +53,7 @@ export function AppShell() {
         items: [
           { to: '/catalog', label: t('nav.fruits'), icon: Apple },
           { to: '/vendors', label: t('nav.vendors'), icon: Users },
+          { to: '/locations', label: t('nav.locations'), icon: MapPin },
         ] as NavItem[],
       },
     ],
@@ -72,6 +76,8 @@ export function AppShell() {
       [
         { to: '/catalog', label: t('nav.fruitsVarieties'), icon: Apple },
         { to: '/vendors', label: t('nav.vendors'), icon: Users },
+        { to: '/locations', label: t('nav.locations'), icon: MapPin },
+        { to: '/stock/transfer', label: t('nav.transfer'), icon: ArrowLeftRight },
         { to: '/stock/movements', label: t('nav.stockMovements'), icon: History },
         { to: '/stock/report', label: t('nav.dailyReport'), icon: FileText },
       ] as NavItem[],
